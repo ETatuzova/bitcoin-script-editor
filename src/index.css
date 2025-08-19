@@ -49,8 +49,6 @@ button {
 button:hover {
   border-color: #646cff;
 }
-button:focus,
-
 button.code-tab-button.active {
   background-color: #646cff;
 }

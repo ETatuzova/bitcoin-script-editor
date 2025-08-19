@@ -106,6 +106,7 @@ const cleanHex = (s) => s.replace(/\s+/g, "").toLowerCase();
 
 function hexToBytes(hex) {
   const h = cleanHex(hex);
+  if (!isHex(h)) throw new Error("Invalid hex format");
   if (h.length % 2 !== 0) throw new Error("Invalid hex: odd length");
   const out = new Uint8Array(h.length / 2);
   for (let i = 0; i < out.length; i++) out[i] = parseInt(h.substr(i * 2, 2), 16);
@@ -315,14 +316,16 @@ const Header = () => (
   </div>
 );
 
-const Editor = ({ id, value, onChange, placeholder }) => (
+const Editor = ({ id, value, onChange, onInput, placeholder, is_readonly }) => (
   <textarea
     className="editor-textarea"
     id={id}
     value={value}
-    onChange={(e) => onChange(e.target.value)}
+    onChange={onChange}
+    onInput={onInput}
     placeholder={placeholder}
     spellCheck={false}
+    readOnly={is_readonly}
   />
 );
 
@@ -379,6 +382,9 @@ export default function App() {
   const [activeTab, setActiveTab] = useState("ASM"); // "ASM" | "HEX" | "PYTHON" | "CPP" | "DEBUG"
   const [asm, setAsm] = useState("");
   const [hex, setHex] = useState("");
+  const [python, setPython] = useState("");
+  const [cpp, setCpp] = useState("");
+  const [debug, setDebug] = useState("");
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
   const [tests, setTests] = useState([]);
@@ -460,37 +466,57 @@ export default function App() {
         <Card>
           <div className="p-3 flex items-center gap-2">
             <TabButton id="tab-ASM" is_active={activeTab === "ASM"} onClick={() => {
-              setActiveTab("ASM");
-              document.getElementById("tab-" + activeTab).classList.remove("active");
-              document.getElementById("tab-ASM").classList.add("active");
+              if( !error ) {
+                document.getElementById("tab-" + activeTab).classList.remove("active");
+                setActiveTab("ASM");
+                document.getElementById("tab-ASM").classList.add("active");
+              } else {
+                document.getElementById("tab-" + activeTab).focus();
+              }
             }}>
               ASM
             </TabButton>
             <TabButton id="tab-HEX" active={activeTab === "HEX"} onClick={() => {
-              setActiveTab("HEX");
-              document.getElementById("tab-" + activeTab).classList.remove("active");
-              document.getElementById("tab-HEX").classList.add("active");
+              if( !error ) {
+                document.getElementById("tab-" + activeTab).classList.remove("active");
+                setActiveTab("HEX");
+                document.getElementById("tab-HEX").classList.add("active");
+              } else {
+                document.getElementById("tab-HEX").focus();
+              }
             }}>
               HEX
             </TabButton>
             <TabButton id="tab-PYTHON" active={activeTab === "PYTHON"} onClick={() => {
-              setActiveTab("PYTHON");
-              document.getElementById("tab-" + activeTab).classList.remove("active");
-              document.getElementById("tab-PYTHON").classList.add("active");
+              if( !error ) {
+                document.getElementById("tab-" + activeTab).classList.remove("active");
+                setActiveTab("PYTHON");
+                document.getElementById("tab-PYTHON").classList.add("active");
+              } else {
+                document.getElementById("tab-PYTHON").focus();
+              }
             }}>
               PYTHON
             </TabButton>
             <TabButton id="tab-CPP" active={activeTab === "CPP"} onClick={() => {
-              setActiveTab("CPP");
-              document.getElementById("tab-" + activeTab).classList.remove("active");
-              document.getElementById("tab-CPP").classList.add("active");
+              if( !error ) {
+                document.getElementById("tab-" + activeTab).classList.remove("active");
+                setActiveTab("CPP");
+                document.getElementById("tab-CPP").classList.add("active");
+              } else {
+                document.getElementById("tab-CPP").focus();
+              }
             }}>
               CPP
             </TabButton>
             <TabButton id="tab-DEBUG" active={activeTab === "DEBUG"} onClick={() => {
-              setActiveTab("DEBUG");
-              document.getElementById("tab-" + activeTab).classList.remove("active");
-              document.getElementById("tab-DEBUG").classList.add("active");
+              if( !error ) {
+                document.getElementById("tab-" + activeTab).classList.remove("active");
+                setActiveTab("DEBUG");
+                document.getElementById("tab-DEBUG").classList.add("active");
+              } else {
+                document.getElementById("tab-DEBUG").focus();
+              }
             }}>
               DEBUG
             </TabButton>
@@ -506,8 +532,9 @@ export default function App() {
                 transition={{ duration: 0.0 }}
               >
                 <Editor
+                  id="editor-ASM"
                   value={asm}
-                  onChange={setAsm}
+                  onChange={(e) => {setAsm(e.target.value)}}
                   placeholder="e.g. OP_DUP OP_HASH160 <pubKeyHash> OP_EQUALVERIFY OP_CHECKSIG"
                 />
               </motion.div>
@@ -520,8 +547,15 @@ export default function App() {
                 transition={{ duration: 0.0 }}
               >
                 <Editor
+                  id="editor-HEX"
                   value={hex}
-                  onChange={setHex}
+                  onChange={(e) => {setHex(e.target.value)}}
+                  onInput={(e) => {
+                    const regex = /[^0-9a-fA-F]/g;
+                    if (regex.test(e.target.value)) {
+                      e.target.value = e.target.value.replace(regex, '');
+                    }
+                  }}
                   placeholder="e.g. 76a91400112233445566778899aabbccddeeff0011223388ac"
                 />
               </motion.div>
@@ -534,8 +568,11 @@ export default function App() {
                 transition={{ duration: 0.0 }}
               >
                 <Editor
-                  value={hex}
+                  id="editor-PYTHON"
+                  value={python}
+                  onChange={(e) => {setPython(e.target.value)}}
                   placeholder="e.g. python <code>"
+                  is_readonly={true}
                 />
               </motion.div>
             ) : activeTab === "CPP" ? (
@@ -547,8 +584,11 @@ export default function App() {
                 transition={{ duration: 0.0 }}
               >
                 <Editor
-                  value={hex}
+                  id="editor-CPP"
+                  value={cpp}
+                  onChange={(e) => {setCpp(e.target.value)}}
                   placeholder="e.g. C++ <code>"
+                  is_readonly={true}
                 />
               </motion.div>
             ) : (
@@ -560,8 +600,11 @@ export default function App() {
                 transition={{ duration: 0.0 }}
               >
                 <Editor
-                  value={hex}
+                  id="editor-DEBUG"
+                  value={debug}
+                  onChange={(e) => {setDebug(e.target.value)}}
                   placeholder="e.g. DEBUG <code>"
+                  is_readonly={true}
                 />
               </motion.div>
             )
