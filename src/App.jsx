@@ -251,7 +251,7 @@ function bytesToAsm(bytes) {
 
     const name = VAL2NAME.get(op);
     if (name) out.push(name);
-    else out.push(`0x${op.toString(16).padStart(2, "0")}`); // unknown opcode fallback
+    else throw new Error("Unknown opcode")
   }
 
   return out.join(" ");
@@ -263,6 +263,25 @@ function hexToAsm(hex) {
   return bytesToAsm(bytes);
 }
 
+// -------------------- ASM->PY --------------------------
+function asmToPy(raw_asm) {
+  const bytes = asmToBytes(raw_asm);
+  const asm = bytesToAsm(bytes);
+  let result = "";
+  result += "[";
+  let terms = asm.split(" ");
+  for (let i = 0; i < terms.length; i++) {
+    const term = terms[i].trim();
+    if (term.startsWith("<") && term.endsWith(">")) {
+      // Hex data
+      const hex = term.slice(1, -1);
+      terms[i] = `0x${hex}`;
+    }
+  }
+  result += terms.join(", ");
+  result += "]";
+  return result;
+}
 // -------------------- UI Components --------------------
 const SAMPLES = {
   "P2PKH (legacy)": {
@@ -403,6 +422,7 @@ export default function App() {
     try {
       const newHex = debAsm.trim() ? asmToHex(debAsm) : "";
       setHex(newHex);
+      setPython(asmToPy(debAsm));
       setError("");
       setInfo(newHex ? `${(newHex.length / 2).toString()} bytes` : "");
     } catch (e) {
