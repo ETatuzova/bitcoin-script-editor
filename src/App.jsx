@@ -106,6 +106,7 @@ const cleanHex = (s) => s.replace(/\s+/g, "").toLowerCase();
 
 function hexToBytes(hex) {
   const h = cleanHex(hex);
+  if (!isHex(h)) throw new Error("Invalid hex format");
   if (h.length % 2 !== 0) throw new Error("Invalid hex: odd length");
   const out = new Uint8Array(h.length / 2);
   for (let i = 0; i < out.length; i++) out[i] = parseInt(h.substr(i * 2, 2), 16);
@@ -250,7 +251,7 @@ function bytesToAsm(bytes) {
 
     const name = VAL2NAME.get(op);
     if (name) out.push(name);
-    else out.push(`0x${op.toString(16).padStart(2, "0")}`); // unknown opcode fallback
+    else throw new Error("Unknown opcode")
   }
 
   return out.join(" ");
@@ -260,6 +261,42 @@ function hexToAsm(hex) {
   const bytes = hexToBytes(cleanHex(hex));
   if (bytes.length === 0) return "";
   return bytesToAsm(bytes);
+}
+
+// -------------------- ASM->PY --------------------------
+function asmToPy(raw_asm) {
+  const bytes = asmToBytes(raw_asm);
+  const asm = bytesToAsm(bytes);
+  let result = "[";
+  let terms = asm.split(" ");
+  for (let i = 0; i < terms.length; i++) {
+    const term = terms[i].trim();
+    if (term.startsWith("<") && term.endsWith(">")) {
+      // Hex data
+      const hex = term.slice(1, -1);
+      terms[i] = `0x${hex}`;
+    }
+  }
+  result += terms.join(", ");
+  result += "]";
+  return result;
+}
+
+// -------------------- Hex->CPP -------------------------
+function hexToCpp(hex) {
+  const bytes = hexToBytes(cleanHex(hex));
+  if (bytes.length === 0) return "";
+  return bytesToCpp(bytes);
+}
+
+function bytesToCpp(bytes) {
+  let result = "{";
+  for (let i = 0; i < bytes.length; i++) {
+    if( i > 0) result += ", ";
+    result += `0x${bytes[i].toString(16).padStart(2, "0")}`;
+  }
+  result += "}";
+  return result;
 }
 
 // -------------------- UI Components --------------------
@@ -290,14 +327,11 @@ function useDebounced(value, delay = 300) {
   return deb;
 }
 
-const TabButton = ({ active, onClick, children }) => (
+const TabButton = ({ id, is_active, onClick, children }) => (
   <button
-    onClick={onClick}
-    className={`px-4 py-2 rounded-2xl text-sm font-medium transition shadow-sm border ${
-      active
-        ? "bg-black text-white border-black"
-        : "bg-white hover:bg-gray-50 border-gray-200"
-    }`}
+    id = {id}
+    onClick={() => onClick()}
+    className={"code-tab-button " + (is_active ? "active" : "")}
   >
     {children}
   </button>
@@ -315,46 +349,19 @@ const Header = () => (
       <h1 className="text-2xl font-semibold">Bitcoin Script Editor</h1>
       <p className="text-sm text-gray-500">Live Hex ⇄ ASM with validation (no external libs)</p>
     </div>
-    <a
-      href="https://en.bitcoin.it/wiki/Script"
-      target="_blank"
-      rel="noreferrer"
-      className="text-xs underline text-gray-600"
-    >
-      Script reference
-    </a>
   </div>
 );
 
-const Toolbar = ({ onCopy, onPaste, onClear, onSample, onRunTests }) => (
-  <div className="flex items-center gap-2 p-3 border-b border-gray-100">
-    <button className="px-3 py-1.5 rounded-xl border text-sm hover:bg-gray-50" onClick={onCopy}>Copy</button>
-    <button className="px-3 py-1.5 rounded-xl border text-sm hover:bg-gray-50" onClick={onPaste}>Paste</button>
-    <button className="px-3 py-1.5 rounded-xl border text-sm hover:bg-gray-50" onClick={onClear}>Clear</button>
-    <div className="ml-auto flex items-center gap-2">
-      <label className="text-xs text-gray-500">Templates</label>
-      <select className="px-2 py-1.5 text-sm border rounded-xl" onChange={(e) => onSample(e.target.value)} defaultValue="">
-        <option value="" disabled>
-          Choose…
-        </option>
-        {Object.keys(SAMPLES).map((k) => (
-          <option key={k} value={k}>
-            {k}
-          </option>
-        ))}
-      </select>
-      <button className="px-3 py-1.5 rounded-xl border text-sm hover:bg-gray-50" onClick={onRunTests}>Run tests</button>
-    </div>
-  </div>
-);
-
-const Editor = ({ value, onChange, placeholder }) => (
+const Editor = ({ id, value, onChange, onInput, placeholder, is_readonly }) => (
   <textarea
-    className="w-full h-[280px] p-4 outline-none resize-y font-mono text-sm rounded-b-2xl"
+    className="editor-textarea"
+    id={id}
     value={value}
-    onChange={(e) => onChange(e.target.value)}
+    onChange={onChange}
+    onInput={onInput}
     placeholder={placeholder}
     spellCheck={false}
+    readOnly={is_readonly}
   />
 );
 
@@ -408,9 +415,12 @@ function runSelfTests() {
 }
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState("ASM"); // "ASM" | "HEX"
+  const [activeTab, setActiveTab] = useState("ASM"); // "ASM" | "HEX" | "PYTHON" | "CPP" | "DEBUG"
   const [asm, setAsm] = useState("");
   const [hex, setHex] = useState("");
+  const [python, setPython] = useState("");
+  const [cpp, setCpp] = useState("");
+  const [debug, setDebug] = useState("");
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
   const [tests, setTests] = useState([]);
@@ -429,6 +439,8 @@ export default function App() {
     try {
       const newHex = debAsm.trim() ? asmToHex(debAsm) : "";
       setHex(newHex);
+      setPython(asmToPy(debAsm));
+      setCpp(hexToCpp(newHex));
       setError("");
       setInfo(newHex ? `${(newHex.length / 2).toString()} bytes` : "");
     } catch (e) {
@@ -491,16 +503,62 @@ export default function App() {
 
         <Card>
           <div className="p-3 flex items-center gap-2">
-            <TabButton active={activeTab === "ASM"} onClick={() => setActiveTab("ASM")}>
+            <TabButton id="tab-ASM" is_active={activeTab === "ASM"} onClick={() => {
+              if( !error ) {
+                document.getElementById("tab-" + activeTab).classList.remove("active");
+                setActiveTab("ASM");
+                document.getElementById("tab-ASM").classList.add("active");
+              } else {
+                document.getElementById("tab-" + activeTab).focus();
+              }
+            }}>
               ASM
             </TabButton>
-            <TabButton active={activeTab === "HEX"} onClick={() => setActiveTab("HEX")}>
+            <TabButton id="tab-HEX" active={activeTab === "HEX"} onClick={() => {
+              if( !error ) {
+                document.getElementById("tab-" + activeTab).classList.remove("active");
+                setActiveTab("HEX");
+                document.getElementById("tab-HEX").classList.add("active");
+              } else {
+                document.getElementById("tab-HEX").focus();
+              }
+            }}>
               HEX
             </TabButton>
-            <div className="ml-auto text-xs text-gray-500">{info}</div>
+            <TabButton id="tab-PYTHON" active={activeTab === "PYTHON"} onClick={() => {
+              if( !error ) {
+                document.getElementById("tab-" + activeTab).classList.remove("active");
+                setActiveTab("PYTHON");
+                document.getElementById("tab-PYTHON").classList.add("active");
+              } else {
+                document.getElementById("tab-PYTHON").focus();
+              }
+            }}>
+              PYTHON
+            </TabButton>
+            <TabButton id="tab-CPP" active={activeTab === "CPP"} onClick={() => {
+              if( !error ) {
+                document.getElementById("tab-" + activeTab).classList.remove("active");
+                setActiveTab("CPP");
+                document.getElementById("tab-CPP").classList.add("active");
+              } else {
+                document.getElementById("tab-CPP").focus();
+              }
+            }}>
+              CPP
+            </TabButton>
+            <TabButton id="tab-DEBUG" active={activeTab === "DEBUG"} onClick={() => {
+              if( !error ) {
+                document.getElementById("tab-" + activeTab).classList.remove("active");
+                setActiveTab("DEBUG");
+                document.getElementById("tab-DEBUG").classList.add("active");
+              } else {
+                document.getElementById("tab-DEBUG").focus();
+              }
+            }}>
+              DEBUG
+            </TabButton>
           </div>
-
-          <Toolbar onCopy={onCopy} onPaste={onPaste} onClear={onClear} onSample={loadSample} onRunTests={() => setTests(runSelfTests())} />
 
           <AnimatePresence mode="wait">
             {activeTab === "ASM" ? (
@@ -509,29 +567,86 @@ export default function App() {
                 initial={{ opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -6 }}
-                transition={{ duration: 0.15 }}
+                transition={{ duration: 0.0 }}
               >
                 <Editor
+                  id="editor-ASM"
                   value={asm}
-                  onChange={setAsm}
+                  onChange={(e) => {setAsm(e.target.value)}}
                   placeholder="e.g. OP_DUP OP_HASH160 <pubKeyHash> OP_EQUALVERIFY OP_CHECKSIG"
                 />
               </motion.div>
-            ) : (
+            ) : activeTab === "HEX" ? (
               <motion.div
                 key="hex"
                 initial={{ opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -6 }}
-                transition={{ duration: 0.15 }}
+                transition={{ duration: 0.0 }}
               >
                 <Editor
+                  id="editor-HEX"
                   value={hex}
-                  onChange={setHex}
+                  onChange={(e) => {setHex(e.target.value)}}
+                  onInput={(e) => {
+                    const regex = /[^0-9a-fA-F]/g;
+                    if (regex.test(e.target.value)) {
+                      e.target.value = e.target.value.replace(regex, '');
+                    }
+                  }}
                   placeholder="e.g. 76a91400112233445566778899aabbccddeeff0011223388ac"
                 />
               </motion.div>
-            )}
+            ) : activeTab === "PYTHON" ? (
+              <motion.div
+                key="python"
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -6 }}
+                transition={{ duration: 0.0 }}
+              >
+                <Editor
+                  id="editor-PYTHON"
+                  value={python}
+                  onChange={(e) => {setPython(e.target.value)}}
+                  placeholder="e.g. python <code>"
+                  is_readonly={true}
+                />
+              </motion.div>
+            ) : activeTab === "CPP" ? (
+              <motion.div
+                key="cpp"
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -6 }}
+                transition={{ duration: 0.0 }}
+              >
+                <Editor
+                  id="editor-CPP"
+                  value={cpp}
+                  onChange={(e) => {setCpp(e.target.value)}}
+                  placeholder="e.g. C++ <code>"
+                  is_readonly={true}
+                />
+              </motion.div>
+            ) : (
+              <motion.div
+                key="debug"
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -6 }}
+                transition={{ duration: 0.0 }}
+              >
+                <Editor
+                  id="editor-DEBUG"
+                  value={debug}
+                  onChange={(e) => {setDebug(e.target.value)}}
+                  placeholder="e.g. DEBUG <code>"
+                  is_readonly={true}
+                />
+              </motion.div>
+            )
+          }
           </AnimatePresence>
 
           {error && (
@@ -539,6 +654,7 @@ export default function App() {
               ⚠️ {error}
             </div>
           )}
+          <div className="ml-auto text-xs text-gray-500">{info}</div>
         </Card>
 
         <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -592,10 +708,6 @@ export default function App() {
             </div>
           </div>
         </Card>
-
-        <div className="mt-8 text-xs text-gray-500">
-          Built with React + framer-motion. No backend or crypto libs required.
-        </div>
       </div>
     </div>
   );
