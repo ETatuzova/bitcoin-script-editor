@@ -267,8 +267,7 @@ function hexToAsm(hex) {
 function asmToPy(raw_asm) {
   const bytes = asmToBytes(raw_asm);
   const asm = bytesToAsm(bytes);
-  let result = "";
-  result += "[";
+  let result = "[";
   let terms = asm.split(" ");
   for (let i = 0; i < terms.length; i++) {
     const term = terms[i].trim();
@@ -282,6 +281,24 @@ function asmToPy(raw_asm) {
   result += "]";
   return result;
 }
+
+// -------------------- Hex->CPP -------------------------
+function hexToCpp(hex) {
+  const bytes = hexToBytes(cleanHex(hex));
+  if (bytes.length === 0) return "";
+  return bytesToCpp(bytes);
+}
+
+function bytesToCpp(bytes) {
+  let result = "{";
+  for (let i = 0; i < bytes.length; i++) {
+    if( i > 0) result += ", ";
+    result += `0x${bytes[i].toString(16).padStart(2, "0")}`;
+  }
+  result += "}";
+  return result;
+}
+
 // -------------------- UI Components --------------------
 const SAMPLES = {
   "P2PKH (legacy)": {
@@ -423,6 +440,7 @@ export default function App() {
       const newHex = debAsm.trim() ? asmToHex(debAsm) : "";
       setHex(newHex);
       setPython(asmToPy(debAsm));
+      setCpp(hexToCpp(newHex));
       setError("");
       setInfo(newHex ? `${(newHex.length / 2).toString()} bytes` : "");
     } catch (e) {
