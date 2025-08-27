@@ -52,6 +52,9 @@ button:hover {
 button.code-tab-button.active {
   background-color: #646cff;
 }
+div.tabs-frame {
+  width: 50%;
+}
 
 @media (prefers-color-scheme: light) {
   :root {
@@ -67,6 +70,24 @@ button.code-tab-button.active {
 }
 
 textarea.editor-textarea {
-  width: 50%;
-  height: 300px;
+  min-height: 300px;
+  width: 100%;
+  padding: 2px;
+}
+
+div.float-left{
+  float: left;
+  display: flex;
+}
+
+div.float-right{
+  float: right;
+  display: flex;
+}
+
+div.buttons-container {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 0px 5px;
 }

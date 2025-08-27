@@ -365,6 +365,14 @@ const Editor = ({ id, value, onChange, onInput, placeholder, is_readonly }) => (
   />
 );
 
+const ServerRequestButton = ({ caption, handleClick }) => {
+  return (
+    <button onClick={handleClick} className="server-request-button">
+      {caption}
+    </button>
+  );
+};
+
 // -------------------- Self-tests --------------------
 function normalizeAsm(s) {
   return s.trim().replace(/\s+/g, " ");
@@ -414,6 +422,7 @@ function runSelfTests() {
   return results;
 }
 
+
 export default function App() {
   const [activeTab, setActiveTab] = useState("ASM"); // "ASM" | "HEX" | "PYTHON" | "CPP" | "DEBUG"
   const [asm, setAsm] = useState("");
@@ -427,6 +436,20 @@ export default function App() {
 
   const debAsm = useDebounced(asm);
   const debHex = useDebounced(hex);
+
+  async function handleServerRequest() {
+    // Handle the server request here
+    const response = await fetch("http://localhost:3000/run-job", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ input: hex })
+    });
+    const data = await response.json();
+    console.log("Result from C++:", data);
+    if( data.status == "success" ) setInfo( "✅ " + data.output );
+    else if( data.status == "error") setInfo("⚠️ " + data.output);
+    else setInfo("");
+  }
 
   // Run tests once at load
   useEffect(() => {
@@ -444,6 +467,7 @@ export default function App() {
       setError("");
       setInfo(newHex ? `${(newHex.length / 2).toString()} bytes` : "");
     } catch (e) {
+      setInfo("");
       setError(e.message || String(e));
     }
   }, [debAsm, activeTab]);
@@ -457,6 +481,7 @@ export default function App() {
       setError("");
       setInfo(debHex.trim() ? `${(cleanHex(debHex).length / 2).toString()} bytes` : "");
     } catch (e) {
+      setInfo("");
       setError(e.message || String(e));
     }
   }, [debHex, activeTab]);
@@ -501,7 +526,7 @@ export default function App() {
       <div className="max-w-3xl mx-auto">
         <Header />
 
-        <Card>
+        <Card className = "tabs-frame">
           <div className="p-3 flex items-center gap-2">
             <TabButton id="tab-ASM" is_active={activeTab === "ASM"} onClick={() => {
               if( !error ) {
@@ -649,12 +674,19 @@ export default function App() {
           }
           </AnimatePresence>
 
-          {error && (
-            <div className="px-4 pb-4 text-sm text-red-600">
-              ⚠️ {error}
-            </div>
-          )}
-          <div className="ml-auto text-xs text-gray-500">{info}</div>
+          <div className="buttons-container">
+          <div className="float-left">
+            {error && (
+              <div className="px-4 pb-4 text-sm text-red-600">
+                ⚠️ {error}
+              </div>
+            )}
+            <div className="ml-auto text-xs text-gray-500">{info}</div>
+          </div>
+          <div className="float-right">
+            <ServerRequestButton caption="Run script on server" handleClick={handleServerRequest}/>
+          </div>
+          </div>
         </Card>
 
         <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
