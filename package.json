@@ -12,6 +12,7 @@
   "dependencies": {
     "bitcoinjs-lib": "^6.1.7",
     "buffer": "^6.0.3",
+    "express": "^5.1.0",
     "framer-motion": "^12.23.12",
     "picnic": "^7.1.0",
     "react": "^19.1.1",
