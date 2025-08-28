@@ -1,0 +1,4 @@
+[submodule "indexer"]
+	path = indexer
+	url = git@github.com:alloc-init/indexer.git
+	branch = debugger-playground
