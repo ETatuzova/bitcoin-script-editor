@@ -17,7 +17,6 @@ app.get("/run-job", (req, res) => {
   const input = req.body.input;
 
   // Run C++ program
-//   exec(`./myprog ${input}`, (error, stdout, stderr) => {
   exec(process.cwd() + `/indexer/build/bin/bitcoin-debugger --code=${input}`, (error, stdout, stderr) => {
     if (error) {
       console.error(`Error: ${error.message}`);
