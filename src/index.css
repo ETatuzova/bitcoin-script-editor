@@ -54,6 +54,16 @@ button.code-tab-button.active {
 }
 div.tabs-frame {
   width: 50%;
+  display: inline-block;
+  /* border: #FF0000 1px solid; */
+  /* padding:0px 12px 0px 0px; */
+}
+div.stack-frame {
+  width: 25%;
+  display: inline-block;
+  /* border: #FF0000 1px solid; */
+  vertical-align: top;
+  /* padding:0px 12px 0px 0px; */
 }
 
 @media (prefers-color-scheme: light) {
@@ -72,7 +82,8 @@ div.tabs-frame {
 textarea.editor-textarea {
   min-height: 300px;
   width: 100%;
-  padding: 2px;
+  padding: 5px;
+   box-sizing: border-box;
 }
 
 div.float-left{
@@ -89,5 +100,10 @@ div.buttons-container {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin: 0px 5px;
+  /* margin: 0px 5px; */
+}
+
+button.server-request-button{
+  border-radius: 0px;
+  margin:0px;
 }
