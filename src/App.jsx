@@ -433,6 +433,7 @@ export default function App() {
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
   const [tests, setTests] = useState([]);
+  const [stackData, setStackData] = useState("");
 
   const debAsm = useDebounced(asm);
   const debHex = useDebounced(hex);
@@ -445,9 +446,10 @@ export default function App() {
       body: JSON.stringify({ input: hex })
     });
     const data = await response.json();
+    setStackData(data.stack.join("\n"));
     console.log("Result from C++:", data);
-    if( data.status == "success" ) setInfo( "✅ " + data.output );
-    else if( data.status == "error") setInfo("⚠️ " + data.output);
+    if( data.status == "success" ) setInfo( "✅ Success!" );
+    else if( data.status == "error") setInfo("⚠️ " + data.error);
     else setInfo("");
   }
 
@@ -680,6 +682,7 @@ export default function App() {
               <TabButton>Stack</TabButton>
               <Editor
                 placeholder="Stack"
+                value={stackData}
                 is_readonly={true}
               />
             </div>
