@@ -17,7 +17,6 @@ app.get("/run-job", (req, res) => {
   const input = req.body.input;
 
   // Run C++ program
-//   exec(`./myprog ${input}`, (error, stdout, stderr) => {
   exec(process.cwd() + `/indexer/build/bin/bitcoin-debugger --code=${input}`, (error, stdout, stderr) => {
     if (error) {
       console.error(`Error: ${error.message}`);
@@ -34,7 +33,7 @@ app.post("/run-job", (req, res) => {
   const input = req.body.input;
 
   // Run C++ program
-  exec(process.cwd() + `/../indexer/build/bin/bitcoin-debugger --code=${input}`, (error, stdout, stderr) => {
+  exec(process.cwd() + `/indexer/build/bin/bitcoin-debugger --code=${input}`, (error, stdout, stderr) => {
     if (error) {
       console.error(`Error: ${error.message}`);
       return res.status(500).json({ error: error.message, status: "error", output: stdout.trim() });
@@ -42,7 +41,7 @@ app.post("/run-job", (req, res) => {
     if (stderr) {
       console.error(`Stderr: ${stderr}`);
     }
-    res.json({ output: stdout.trim(), status: "success" });
+    res.json(JSON.parse(stdout.trim()));
   });
 });
 

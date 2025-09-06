@@ -433,6 +433,7 @@ export default function App() {
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
   const [tests, setTests] = useState([]);
+  const [stackData, setStackData] = useState("");
 
   const debAsm = useDebounced(asm);
   const debHex = useDebounced(hex);
@@ -445,9 +446,10 @@ export default function App() {
       body: JSON.stringify({ input: hex })
     });
     const data = await response.json();
+    setStackData(data.stack.join("\n"));
     console.log("Result from C++:", data);
-    if( data.status == "success" ) setInfo( "✅ " + data.output );
-    else if( data.status == "error") setInfo("⚠️ " + data.output);
+    if( data.status == "success" ) setInfo( "✅ Success!" );
+    else if( data.status == "error") setInfo("⚠️ " + data.error);
     else setInfo("");
   }
 
@@ -526,168 +528,188 @@ export default function App() {
       <div className="max-w-3xl mx-auto">
         <Header />
 
-        <Card className = "tabs-frame">
-          <div className="p-3 flex items-center gap-2">
-            <TabButton id="tab-ASM" is_active={activeTab === "ASM"} onClick={() => {
-              if( !error ) {
-                document.getElementById("tab-" + activeTab).classList.remove("active");
-                setActiveTab("ASM");
-                document.getElementById("tab-ASM").classList.add("active");
-              } else {
-                document.getElementById("tab-" + activeTab).focus();
-              }
-            }}>
-              ASM
-            </TabButton>
-            <TabButton id="tab-HEX" active={activeTab === "HEX"} onClick={() => {
-              if( !error ) {
-                document.getElementById("tab-" + activeTab).classList.remove("active");
-                setActiveTab("HEX");
-                document.getElementById("tab-HEX").classList.add("active");
-              } else {
-                document.getElementById("tab-HEX").focus();
-              }
-            }}>
-              HEX
-            </TabButton>
-            <TabButton id="tab-PYTHON" active={activeTab === "PYTHON"} onClick={() => {
-              if( !error ) {
-                document.getElementById("tab-" + activeTab).classList.remove("active");
-                setActiveTab("PYTHON");
-                document.getElementById("tab-PYTHON").classList.add("active");
-              } else {
-                document.getElementById("tab-PYTHON").focus();
-              }
-            }}>
-              PYTHON
-            </TabButton>
-            <TabButton id="tab-CPP" active={activeTab === "CPP"} onClick={() => {
-              if( !error ) {
-                document.getElementById("tab-" + activeTab).classList.remove("active");
-                setActiveTab("CPP");
-                document.getElementById("tab-CPP").classList.add("active");
-              } else {
-                document.getElementById("tab-CPP").focus();
-              }
-            }}>
-              CPP
-            </TabButton>
-            <TabButton id="tab-DEBUG" active={activeTab === "DEBUG"} onClick={() => {
-              if( !error ) {
-                document.getElementById("tab-" + activeTab).classList.remove("active");
-                setActiveTab("DEBUG");
-                document.getElementById("tab-DEBUG").classList.add("active");
-              } else {
-                document.getElementById("tab-DEBUG").focus();
-              }
-            }}>
-              DEBUG
-            </TabButton>
-          </div>
+        <div style={{ width: "100%" }}>
+          <Card className="tabs-frame">
+            <div className="p-3 flex items-center gap-2">
+              <TabButton id="tab-ASM" is_active={activeTab === "ASM"} onClick={() => {
+                if( !error ) {
+                  document.getElementById("tab-" + activeTab).classList.remove("active");
+                  setActiveTab("ASM");
+                  document.getElementById("tab-ASM").classList.add("active");
+                } else {
+                  document.getElementById("tab-" + activeTab).focus();
+                }
+              }}>
+                ASM
+              </TabButton>
+              <TabButton id="tab-HEX" active={activeTab === "HEX"} onClick={() => {
+                if( !error ) {
+                  document.getElementById("tab-" + activeTab).classList.remove("active");
+                  setActiveTab("HEX");
+                  document.getElementById("tab-HEX").classList.add("active");
+                } else {
+                  document.getElementById("tab-HEX").focus();
+                }
+              }}>
+                HEX
+              </TabButton>
+              <TabButton id="tab-PYTHON" active={activeTab === "PYTHON"} onClick={() => {
+                if( !error ) {
+                  document.getElementById("tab-" + activeTab).classList.remove("active");
+                  setActiveTab("PYTHON");
+                  document.getElementById("tab-PYTHON").classList.add("active");
+                } else {
+                  document.getElementById("tab-PYTHON").focus();
+                }
+              }}>
+                PYTHON
+              </TabButton>
+              <TabButton id="tab-CPP" active={activeTab === "CPP"} onClick={() => {
+                if( !error ) {
+                  document.getElementById("tab-" + activeTab).classList.remove("active");
+                  setActiveTab("CPP");
+                  document.getElementById("tab-CPP").classList.add("active");
+                } else {
+                  document.getElementById("tab-CPP").focus();
+                }
+              }}>
+                CPP
+              </TabButton>
+              <TabButton id="tab-DEBUG" active={activeTab === "DEBUG"} onClick={() => {
+                if( !error ) {
+                  document.getElementById("tab-" + activeTab).classList.remove("active");
+                  setActiveTab("DEBUG");
+                  document.getElementById("tab-DEBUG").classList.add("active");
+                } else {
+                  document.getElementById("tab-DEBUG").focus();
+                }
+              }}>
+                DEBUG
+              </TabButton>
+            </div>
 
-          <AnimatePresence mode="wait">
-            {activeTab === "ASM" ? (
-              <motion.div
-                key="asm"
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -6 }}
-                transition={{ duration: 0.0 }}
-              >
-                <Editor
-                  id="editor-ASM"
-                  value={asm}
-                  onChange={(e) => {setAsm(e.target.value)}}
-                  placeholder="e.g. OP_DUP OP_HASH160 <pubKeyHash> OP_EQUALVERIFY OP_CHECKSIG"
-                />
-              </motion.div>
-            ) : activeTab === "HEX" ? (
-              <motion.div
-                key="hex"
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -6 }}
-                transition={{ duration: 0.0 }}
-              >
-                <Editor
-                  id="editor-HEX"
-                  value={hex}
-                  onChange={(e) => {setHex(e.target.value)}}
-                  onInput={(e) => {
-                    const regex = /[^0-9a-fA-F]/g;
-                    if (regex.test(e.target.value)) {
-                      e.target.value = e.target.value.replace(regex, '');
-                    }
-                  }}
-                  placeholder="e.g. 76a91400112233445566778899aabbccddeeff0011223388ac"
-                />
-              </motion.div>
-            ) : activeTab === "PYTHON" ? (
-              <motion.div
-                key="python"
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -6 }}
-                transition={{ duration: 0.0 }}
-              >
-                <Editor
-                  id="editor-PYTHON"
-                  value={python}
-                  onChange={(e) => {setPython(e.target.value)}}
-                  placeholder="e.g. python <code>"
-                  is_readonly={true}
-                />
-              </motion.div>
-            ) : activeTab === "CPP" ? (
-              <motion.div
-                key="cpp"
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -6 }}
-                transition={{ duration: 0.0 }}
-              >
-                <Editor
-                  id="editor-CPP"
-                  value={cpp}
-                  onChange={(e) => {setCpp(e.target.value)}}
-                  placeholder="e.g. C++ <code>"
-                  is_readonly={true}
-                />
-              </motion.div>
-            ) : (
-              <motion.div
-                key="debug"
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -6 }}
-                transition={{ duration: 0.0 }}
-              >
-                <Editor
-                  id="editor-DEBUG"
-                  value={debug}
-                  onChange={(e) => {setDebug(e.target.value)}}
-                  placeholder="e.g. DEBUG <code>"
-                  is_readonly={true}
-                />
-              </motion.div>
-            )
-          }
-          </AnimatePresence>
-
-          <div className="buttons-container">
-          <div className="float-left">
-            {error && (
-              <div className="px-4 pb-4 text-sm text-red-600">
-                ⚠️ {error}
-              </div>
-            )}
-            <div className="ml-auto text-xs text-gray-500">{info}</div>
-          </div>
-          <div className="float-right">
-            <ServerRequestButton caption="Run script on server" handleClick={handleServerRequest}/>
-          </div>
-          </div>
-        </Card>
+            <AnimatePresence mode="wait">
+              {activeTab === "ASM" ? (
+                <motion.div
+                  key="asm"
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -6 }}
+                  transition={{ duration: 0.0 }}
+                >
+                  <Editor
+                    id="editor-ASM"
+                    value={asm}
+                    onChange={(e) => {setAsm(e.target.value)}}
+                    placeholder="e.g. OP_DUP OP_HASH160 <pubKeyHash> OP_EQUALVERIFY OP_CHECKSIG"
+                  />
+                </motion.div>
+              ) : activeTab === "HEX" ? (
+                <motion.div
+                  key="hex"
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -6 }}
+                  transition={{ duration: 0.0 }}
+                >
+                  <Editor
+                    id="editor-HEX"
+                    value={hex}
+                    onChange={(e) => {setHex(e.target.value)}}
+                    onInput={(e) => {
+                      const regex = /[^0-9a-fA-F]/g;
+                      if (regex.test(e.target.value)) {
+                        e.target.value = e.target.value.replace(regex, '');
+                      }
+                    }}
+                    placeholder="e.g. 76a91400112233445566778899aabbccddeeff0011223388ac"
+                  />
+                </motion.div>
+              ) : activeTab === "PYTHON" ? (
+                <motion.div
+                  key="python"
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -6 }}
+                  transition={{ duration: 0.0 }}
+                >
+                  <Editor
+                    id="editor-PYTHON"
+                    value={python}
+                    onChange={(e) => {setPython(e.target.value)}}
+                    placeholder="e.g. python <code>"
+                    is_readonly={true}
+                  />
+                </motion.div>
+              ) : activeTab === "CPP" ? (
+                <motion.div
+                  key="cpp"
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -6 }}
+                  transition={{ duration: 0.0 }}
+                >
+                  <Editor
+                    id="editor-CPP"
+                    value={cpp}
+                    onChange={(e) => {setCpp(e.target.value)}}
+                    placeholder="e.g. C++ <code>"
+                    is_readonly={true}
+                  />
+                </motion.div>
+              ) : (
+                <motion.div
+                  key="debug"
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -6 }}
+                  transition={{ duration: 0.0 }}
+                >
+                  <Editor
+                    id="editor-DEBUG"
+                    value={debug}
+                    onChange={(e) => {setDebug(e.target.value)}}
+                    placeholder="e.g. DEBUG <code>"
+                    is_readonly={true}
+                  />
+                </motion.div>
+              )
+            }
+            </AnimatePresence>
+          </Card>
+          <Card className="stack-frame">
+            <div className="p-3 flex items-center gap-2">
+              <TabButton>Stack</TabButton>
+              <Editor
+                placeholder="Stack"
+                value={stackData}
+                is_readonly={true}
+              />
+            </div>
+          </Card>
+          <Card className="stack-frame">
+            <div className="p-3 flex items-center gap-2">
+              <TabButton>AltStack</TabButton>
+              <Editor
+                placeholder="AltStack"
+                is_readonly={true}
+              />
+            </div>
+          </Card>
+            <div className="buttons-container">
+            <div className="float-left">
+              {error && (
+                <div className="px-4 pb-4 text-sm text-red-600">
+                  ⚠️ {error}
+                </div>
+              )}
+              <div className="ml-auto text-xs text-gray-500">{info}</div>
+            </div>
+            <div className="float-right">
+              <ServerRequestButton caption="Run script on server" handleClick={handleServerRequest}/>
+            </div>
+            </div>
+        </div>
 
         <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
           <Card className="p-4">
