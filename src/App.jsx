@@ -3,6 +3,8 @@ import { motion, AnimatePresence, hex } from "framer-motion";
 import { param } from "framer-motion/client";
 import { useSearchParams } from 'react-router-dom';
 
+import {Editor, useMonaco} from '@monaco-editor/react';
+
 
 /**
  * Bitcoin Script Hex ⇄ ASM Editor
@@ -17,6 +19,7 @@ import { useSearchParams } from 'react-router-dom';
 const OPC = {
   OP_0: 0x00,
   OP_FALSE: 0x00,
+  OP_TRUE: 0x51,
   OP_PUSHDATA1: 0x4c,
   OP_PUSHDATA2: 0x4d,
   OP_PUSHDATA4: 0x4e,
@@ -106,6 +109,11 @@ const VAL2NAME = (() => {
 // -------------------- Helpers --------------------
 const isHex = (s) => /^[0-9a-fA-F]*$/.test(s);
 const cleanHex = (s) => s.replace(/\s+/g, "").toLowerCase();
+
+function asmToDebug(asm){
+  const tokens = asm.trim().split(/\s+/);
+  return tokens.join("\n")
+}
 
 function hexToBytes(hex) {
   const h = cleanHex(hex);
@@ -355,16 +363,22 @@ const Header = () => (
   </div>
 );
 
-const Editor = ({ id, value, onChange, onInput, placeholder, is_readonly }) => (
-  <textarea
-    className="editor-textarea"
+const SimpleEditor = ({ id, value, onChange, onInput, placeholder, is_readonly, language, theme }) => (
+  <Editor
+    height = "400px"
+    // className="editor-textarea"
+    theme={theme || "vs-dark"}
     id={id}
+    language={language || "plaintext"}
     value={value}
     onChange={onChange}
     onInput={onInput}
-    placeholder={placeholder}
     spellCheck={false}
-    readOnly={is_readonly}
+    options={{
+      readOnly: is_readonly,
+      domReadOnly: is_readonly,
+      minimap: { enabled: false }
+    }}
   />
 );
 
@@ -434,6 +448,7 @@ function loadURLParams(){
     result.asm = hexToAsm(result.hex);
     result.python = asmToPy(result.asm);
     result.cpp = hexToCpp(result.hex);
+    result.debug = asmToDebug(result.asm);
     result.info = result.hex ? `${(cleanHex(result.hex).length / 2).toString()} bytes` : "";
   } catch (e) {
     result.info = "";
@@ -459,6 +474,34 @@ export default function App() {
 
   const debAsm = useDebounced(asm);
   const debHex = useDebounced(hex);
+
+  const monaco = useMonaco();
+
+  useEffect(() => {
+    if (!monaco) return;
+
+    // Register new language
+    monaco.languages.register({ id: "bitcoin-script" });
+
+    // Define highlighting rules
+    monaco.languages.setMonarchTokensProvider("bitcoin-script", {
+      tokenizer: {
+        root: [
+          [/\bOP_[A-Z0-9_]+\b/, "keyword"], // opcodes
+          [/<[a-zA-Z0-9]+>/, "string"], // push data like <pubKeyHash>
+          [/[0-9]+/, "number"],          // numbers
+        ],
+      },
+    });
+
+    // Optional: language configuration (comments, brackets)
+    monaco.languages.setLanguageConfiguration("bitcoin-script", {
+      comments: {
+        lineComment: "//",
+      },
+    });
+  }, [monaco]);
+
 
   async function handleServerRequest() {
     // Handle the server request here
@@ -504,6 +547,7 @@ export default function App() {
       setHex(newHex);
       setPython(asmToPy(debAsm));
       setCpp(hexToCpp(newHex));
+      setDebug(asmToDebug(debAsm));
       setError("");
       setInfo(newHex ? `${(newHex.length / 2).toString()} bytes` : "");
       if( searchParams.get("hex") != newHex)
@@ -520,6 +564,9 @@ export default function App() {
     try {
       const newAsm = debHex.trim() ? hexToAsm(debHex) : "";
       setAsm(newAsm);
+      setPython(asmToPy(newAsm));
+      setCpp(hexToCpp(debHex));
+      setDebug(asmToDebug(newAsm));
       setError("");
       setInfo(debHex.trim() ? `${(cleanHex(debHex).length / 2).toString()} bytes` : "");
       if( searchParams.get("hex") != cleanHex(debHex) )
@@ -639,10 +686,11 @@ export default function App() {
                   exit={{ opacity: 0, y: -6 }}
                   transition={{ duration: 0.0 }}
                 >
-                  <Editor
+                  <SimpleEditor
                     id="editor-ASM"
+                    language={"bitcoin-script"}
                     value={asm}
-                    onChange={(e) => {setAsm(e.target.value)}}
+                    onChange={(e) => {setAsm(e)}}
                     placeholder="e.g. OP_DUP OP_HASH160 <pubKeyHash> OP_EQUALVERIFY OP_CHECKSIG"
                   />
                 </motion.div>
@@ -654,16 +702,17 @@ export default function App() {
                   exit={{ opacity: 0, y: -6 }}
                   transition={{ duration: 0.0 }}
                 >
-                  <Editor
+                  <SimpleEditor
                     id="editor-HEX"
                     value={hex}
-                    onChange={(e) => {setHex(e.target.value)}}
-                    onInput={(e) => {
-                      const regex = /[^0-9a-fA-F]/g;
-                      if (regex.test(e.target.value)) {
-                        e.target.value = e.target.value.replace(regex, '');
-                      }
-                    }}
+                    onChange={(e) => {setHex(e)}}
+                    language={"bitcoin-hex"}
+                    // onInput={(e) => {
+                    //   const regex = /[^0-9a-fA-F]/g;
+                    //   if (regex.test(e.target.value)) {
+                    //     e.target.value = e.target.value.replace(regex, '');
+                    //   }
+                    // }}
                     placeholder="e.g. 76a91400112233445566778899aabbccddeeff0011223388ac"
                   />
                 </motion.div>
@@ -675,8 +724,9 @@ export default function App() {
                   exit={{ opacity: 0, y: -6 }}
                   transition={{ duration: 0.0 }}
                 >
-                  <Editor
+                  <SimpleEditor
                     id="editor-PYTHON"
+                    language={"python"}
                     value={python}
                     onChange={(e) => {setPython(e.target.value)}}
                     placeholder="e.g. python <code>"
@@ -691,8 +741,9 @@ export default function App() {
                   exit={{ opacity: 0, y: -6 }}
                   transition={{ duration: 0.0 }}
                 >
-                  <Editor
+                  <SimpleEditor
                     id="editor-CPP"
+                    language={"cpp"}
                     value={cpp}
                     onChange={(e) => {setCpp(e.target.value)}}
                     placeholder="e.g. C++ <code>"
@@ -707,7 +758,8 @@ export default function App() {
                   exit={{ opacity: 0, y: -6 }}
                   transition={{ duration: 0.0 }}
                 >
-                  <Editor
+                  <SimpleEditor
+                    language={"bitcoin-script"}
                     id="editor-DEBUG"
                     value={debug}
                     onChange={(e) => {setDebug(e.target.value)}}
@@ -722,7 +774,7 @@ export default function App() {
           <Card className="stack-frame">
             <div className="p-3 flex items-center gap-2">
               <TabButton>Stack</TabButton>
-              <Editor
+              <SimpleEditor
                 placeholder="Stack"
                 value={stackData}
                 is_readonly={true}
@@ -732,7 +784,7 @@ export default function App() {
           <Card className="stack-frame">
             <div className="p-3 flex items-center gap-2">
               <TabButton>AltStack</TabButton>
-              <Editor
+              <SimpleEditor
                 placeholder="AltStack"
                 is_readonly={true}
               />

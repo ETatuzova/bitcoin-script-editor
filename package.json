@@ -10,6 +10,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@monaco-editor/react": "^4.7.0",
     "bitcoinjs-lib": "^6.1.7",
     "buffer": "^6.0.3",
     "express": "^5.1.0",
