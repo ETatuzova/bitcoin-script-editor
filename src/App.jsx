@@ -1,5 +1,8 @@
 import React, { useEffect, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, hex } from "framer-motion";
+import { param } from "framer-motion/client";
+import { useSearchParams } from 'react-router-dom';
+
 
 /**
  * Bitcoin Script Hex ⇄ ASM Editor
@@ -422,18 +425,37 @@ function runSelfTests() {
   return results;
 }
 
+function loadURLParams(){
+  const params = new URLSearchParams(window.location.search);
+  let result = {}
+  if( params.has("hex") ) { result.hex = params.get("hex"); } else { result.hex = ""; }
+  try {
+    result.hex = cleanHex(result.hex.trim());
+    result.asm = hexToAsm(result.hex);
+    result.python = asmToPy(result.asm);
+    result.cpp = hexToCpp(result.hex);
+    result.info = result.hex ? `${(cleanHex(result.hex).length / 2).toString()} bytes` : "";
+  } catch (e) {
+    result.info = "";
+    result.error = e.message || String(e);
+  }
+  return result;
+}
 
 export default function App() {
+  let params = loadURLParams();
+
   const [activeTab, setActiveTab] = useState("ASM"); // "ASM" | "HEX" | "PYTHON" | "CPP" | "DEBUG"
-  const [asm, setAsm] = useState("");
-  const [hex, setHex] = useState("");
-  const [python, setPython] = useState("");
-  const [cpp, setCpp] = useState("");
+  const [asm, setAsm] = useState(params.asm? params.asm : "");
+  const [hex, setHex] = useState(params.hex? params.hex : "");
+  const [python, setPython] = useState(params.python? params.python : "");
+  const [cpp, setCpp] = useState(params.cpp? params.cpp : "");
   const [debug, setDebug] = useState("");
-  const [error, setError] = useState("");
-  const [info, setInfo] = useState("");
+  const [error, setError] = useState(params.error? params.error : "");
+  const [info, setInfo] = useState(params.info? params.info : "");
   const [tests, setTests] = useState([]);
   const [stackData, setStackData] = useState("");
+  const [searchParams, setSearchParams] = useSearchParams(); // Now useLocation can be used here
 
   const debAsm = useDebounced(asm);
   const debHex = useDebounced(hex);
@@ -458,6 +480,22 @@ export default function App() {
     setTests(runSelfTests());
   }, []);
 
+  useEffect(()=>{
+    if((!searchParams.has("hex") && hex != "") || searchParams.get("hex") != hex ){
+      try {
+        const newHex = searchParams.has("hex") ? searchParams.get("hex") : "";
+        const newAsm = newHex ? hexToAsm(newHex) : "";
+        setHex(newHex);
+        setAsm(newAsm);
+        setError("");
+        setInfo(newHex ? `${(cleanHex(newHex).length / 2).toString()} bytes` : "");
+      } catch (e){
+        setInfo("");
+        setError(e.message || String(e));
+      }
+    }
+  }, [searchParams])
+
   // Sync HEX when ASM changes
   useEffect(() => {
     if (activeTab !== "ASM") return; // only compile from active editor
@@ -468,6 +506,8 @@ export default function App() {
       setCpp(hexToCpp(newHex));
       setError("");
       setInfo(newHex ? `${(newHex.length / 2).toString()} bytes` : "");
+      if( searchParams.get("hex") != newHex)
+        setSearchParams(new URLSearchParams(newHex == "" ? {} : { hex: newHex }));
     } catch (e) {
       setInfo("");
       setError(e.message || String(e));
@@ -482,6 +522,8 @@ export default function App() {
       setAsm(newAsm);
       setError("");
       setInfo(debHex.trim() ? `${(cleanHex(debHex).length / 2).toString()} bytes` : "");
+      if( searchParams.get("hex") != cleanHex(debHex) )
+        setSearchParams(new URLSearchParams(debHex == "" ? {} : { hex: debHex }));
     } catch (e) {
       setInfo("");
       setError(e.message || String(e));
