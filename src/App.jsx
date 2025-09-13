@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, use } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useSearchParams } from 'react-router-dom';
 
@@ -332,15 +332,19 @@ function useDebounced(value, delay = 300) {
   return deb;
 }
 
-const TabButton = ({ id, is_active, onClick, children }) => (
-  <button
-    id = {id}
-    onClick={() => onClick()}
-    className={"code-tab-button " + (is_active ? "active" : "")}
-  >
-    {children}
-  </button>
-);
+const TabButton = ({ id, active, onClick, children }) => {
+  const [is_active, setActive] = useState(active);
+  useEffect(() => { setActive(active); }, [active]);
+  return (
+    <button
+      id = {id}
+      onClick={() => { onClick(); }}
+      className={`code-tab-button ${is_active ? "active" : ""}`}
+    >
+      {children}
+    </button>
+  );
+}
 
 const Card = ({ children, className = "" }) => (
   <div className={`rounded-2xl shadow-sm border border-gray-200 bg-white ${className}`}>
@@ -365,12 +369,16 @@ const SimpleEditor = ({
   is_readonly,
   language,
   theme,
-  isDebuggable
+  isDebuggable,
+  highlightLine
 }) => {
+  useEffect(() => {updateDebugLine(highlightLine) }, [highlightLine]);
+
   const editorRef = useRef(null);
   const monacoRef = useRef(null);
   const breakpointsRef = useRef(new Set());
-  const decorationsRef = useRef([]);
+  const breakpointsDecorationsRef = useRef([]);
+  const debugLineDecorationsRef = useRef([]);
 
   const handleEditorDidMount = (editor, monaco) => {
     if( isDebuggable !== true ) return;
@@ -389,17 +397,18 @@ const SimpleEditor = ({
           breakpointsRef.current.add(line);
         }
 
-        updateDecorations();
+        updateBreakpoints();
       }
     });
+    updateDebugLine();
   };
 
-  const updateDecorations = () => {
+  const updateBreakpoints = () => {
     if( isDebuggable !== true ) return;
     if (!editorRef.current || !monacoRef.current) return;
 
-    decorationsRef.current = editorRef.current.deltaDecorations(
-      decorationsRef.current,
+    breakpointsDecorationsRef.current = editorRef.current.deltaDecorations(
+      breakpointsDecorationsRef.current,
       Array.from(breakpointsRef.current).map((line) => ({
         range: new monacoRef.current.Range(line, 1, line, 1),
         options: {
@@ -407,6 +416,23 @@ const SimpleEditor = ({
           glyphMarginClassName: "myBreakpoint",
         },
       }))
+    );
+  };
+
+  const updateDebugLine = () => {
+    if( isDebuggable !== true ) return;
+    if (!editorRef.current || !monacoRef.current) return;
+    if( !highlightLine ) return;
+
+    debugLineDecorationsRef.current = editorRef.current.deltaDecorations(
+      debugLineDecorationsRef.current,
+      [{
+        range: new monacoRef.current.Range(highlightLine, 1, highlightLine, 1),
+        options: {
+          isWholeLine: true,
+          className: "debugLineHighlight",
+        },
+      }]
     );
   };
 
@@ -521,6 +547,7 @@ export default function App() {
   const [tests, setTests] = useState([]);
   const [stackData, setStackData] = useState("");
   const [searchParams, setSearchParams] = useSearchParams(); // Now useLocation can be used here
+  const [debugLine, setDebugLine] = useState();
 
   const debAsm = useDebounced(asm);
   const debHex = useDebounced(hex);
@@ -668,55 +695,39 @@ export default function App() {
         <div style={{ width: "100%" }}>
           <Card className="tabs-frame">
             <div className="p-3 flex items-center gap-2 float-left">
-              <TabButton id="tab-ASM" is_active={activeTab === "ASM"} onClick={() => {
+              <TabButton id="tab-ASM" active={activeTab === "ASM"} onClick={() => {
                 if( !error ) {
-                  document.getElementById("tab-" + activeTab).classList.remove("active");
                   setActiveTab("ASM");
-                  document.getElementById("tab-ASM").classList.add("active");
-                } else {
-                  document.getElementById("tab-" + activeTab).focus();
                 }
               }}>
                 ASM
               </TabButton>
               <TabButton id="tab-HEX" active={activeTab === "HEX"} onClick={() => {
                 if( !error ) {
-                  document.getElementById("tab-" + activeTab).classList.remove("active");
                   setActiveTab("HEX");
-                  document.getElementById("tab-HEX").classList.add("active");
-                } else {
-                  document.getElementById("tab-HEX").focus();
                 }
               }}>
                 HEX
               </TabButton>
               <TabButton id="tab-PYTHON" active={activeTab === "PYTHON"} onClick={() => {
                 if( !error ) {
-                  document.getElementById("tab-" + activeTab).classList.remove("active");
                   setActiveTab("PYTHON");
-                  document.getElementById("tab-PYTHON").classList.add("active");
-                } else {
-                  document.getElementById("tab-PYTHON").focus();
                 }
               }}>
                 PYTHON
               </TabButton>
               <TabButton id="tab-CPP" active={activeTab === "CPP"} onClick={() => {
                 if( !error ) {
-                  document.getElementById("tab-" + activeTab).classList.remove("active");
                   setActiveTab("CPP");
-                  document.getElementById("tab-CPP").classList.add("active");
-                } else {
-                  document.getElementById("tab-CPP").focus();
                 }
               }}>
                 CPP
               </TabButton>
             </div>
             <div className="float-right" style={{ marginRight: "16px" }}>
-              <button className="debug-button" title="Execute one step">a</button>
-              <button className="debug-button" title="Execute until breakpoint">b</button>
-              <button className="debug-button" title="Execute until the end of execution">c</button>
+              <button className="debug-button" title="Execute one step" onClick={()=>{setDebugLine(debugLine? debugLine+1 : 1)}}>&rarr;</button>
+              <button className="debug-button" title="Execute until breakpoint">&darr;</button>
+              <button className="debug-button" title="Execute until the end of execution">&darr;&darr;</button>
             </div>
 
             <AnimatePresence mode="wait">
@@ -735,6 +746,7 @@ export default function App() {
                     onChange={(e) => {setAsm(e)}}
                     placeholder="e.g. OP_DUP OP_HASH160 <pubKeyHash> OP_EQUALVERIFY OP_CHECKSIG"
                     isDebuggable={true}
+                    highlightLine={debugLine}
                   />
                 </motion.div>
               ) : activeTab === "HEX" ? (
