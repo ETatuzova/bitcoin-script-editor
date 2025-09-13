@@ -1,6 +1,5 @@
-import React, { useEffect, useState } from "react";
-import { motion, AnimatePresence, hex } from "framer-motion";
-import { param } from "framer-motion/client";
+import React, { useEffect, useState, useRef, use } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { useSearchParams } from 'react-router-dom';
 
 import {Editor, useMonaco} from '@monaco-editor/react';
@@ -109,11 +108,6 @@ const VAL2NAME = (() => {
 // -------------------- Helpers --------------------
 const isHex = (s) => /^[0-9a-fA-F]*$/.test(s);
 const cleanHex = (s) => s.replace(/\s+/g, "").toLowerCase();
-
-function asmToDebug(asm){
-  const tokens = asm.trim().split(/\s+/);
-  return tokens.join("\n")
-}
 
 function hexToBytes(hex) {
   const h = cleanHex(hex);
@@ -265,7 +259,7 @@ function bytesToAsm(bytes) {
     else throw new Error("Unknown opcode")
   }
 
-  return out.join(" ");
+  return out.join("\n");
 }
 
 function hexToAsm(hex) {
@@ -279,7 +273,7 @@ function asmToPy(raw_asm) {
   const bytes = asmToBytes(raw_asm);
   const asm = bytesToAsm(bytes);
   let result = "[";
-  let terms = asm.split(" ");
+  let terms = asm.split(/\s+/g);
   for (let i = 0; i < terms.length; i++) {
     const term = terms[i].trim();
     if (term.startsWith("<") && term.endsWith(">")) {
@@ -338,15 +332,19 @@ function useDebounced(value, delay = 300) {
   return deb;
 }
 
-const TabButton = ({ id, is_active, onClick, children }) => (
-  <button
-    id = {id}
-    onClick={() => onClick()}
-    className={"code-tab-button " + (is_active ? "active" : "")}
-  >
-    {children}
-  </button>
-);
+const TabButton = ({ id, active, onClick, children }) => {
+  const [is_active, setActive] = useState(active);
+  useEffect(() => { setActive(active); }, [active]);
+  return (
+    <button
+      id = {id}
+      onClick={() => { onClick(); }}
+      className={`code-tab-button ${is_active ? "active" : ""}`}
+    >
+      {children}
+    </button>
+  );
+}
 
 const Card = ({ children, className = "" }) => (
   <div className={`rounded-2xl shadow-sm border border-gray-200 bg-white ${className}`}>
@@ -363,24 +361,104 @@ const Header = () => (
   </div>
 );
 
-const SimpleEditor = ({ id, value, onChange, onInput, placeholder, is_readonly, language, theme }) => (
-  <Editor
-    height = "400px"
-    // className="editor-textarea"
-    theme={theme || "vs-dark"}
-    id={id}
-    language={language || "plaintext"}
-    value={value}
-    onChange={onChange}
-    onInput={onInput}
-    spellCheck={false}
-    options={{
-      readOnly: is_readonly,
-      domReadOnly: is_readonly,
-      minimap: { enabled: false }
-    }}
-  />
-);
+const SimpleEditor = ({
+  id,
+  value,
+  onChange,
+  onInput,
+  is_readonly,
+  language,
+  theme,
+  isDebuggable,
+  highlightLine
+}) => {
+  useEffect(() => {updateDebugLine(highlightLine) }, [highlightLine]);
+
+  const editorRef = useRef(null);
+  const monacoRef = useRef(null);
+  const breakpointsRef = useRef(new Set());
+  const breakpointsDecorationsRef = useRef([]);
+  const debugLineDecorationsRef = useRef([]);
+
+  const handleEditorDidMount = (editor, monaco) => {
+    if( isDebuggable !== true ) return;
+    editorRef.current = editor;
+    monacoRef.current = monaco;
+
+    // Listen for gutter clicks
+    editor.onMouseDown((e) => {
+      if( isDebuggable !== true ) return;
+      if (e.target.type === monaco.editor.MouseTargetType.GUTTER_GLYPH_MARGIN) {
+        const line = e.target.position.lineNumber;
+
+        if (breakpointsRef.current.has(line)) {
+          breakpointsRef.current.delete(line);
+        } else {
+          breakpointsRef.current.add(line);
+        }
+
+        updateBreakpoints();
+      }
+    });
+    updateDebugLine();
+  };
+
+  const updateBreakpoints = () => {
+    if( isDebuggable !== true ) return;
+    if (!editorRef.current || !monacoRef.current) return;
+
+    breakpointsDecorationsRef.current = editorRef.current.deltaDecorations(
+      breakpointsDecorationsRef.current,
+      Array.from(breakpointsRef.current).map((line) => ({
+        range: new monacoRef.current.Range(line, 1, line, 1),
+        options: {
+          isWholeLine: true,
+          glyphMarginClassName: "myBreakpoint",
+        },
+      }))
+    );
+  };
+
+  const updateDebugLine = () => {
+    if( isDebuggable !== true ) return;
+    if (!editorRef.current || !monacoRef.current) return;
+    if( !highlightLine ) return;
+
+    debugLineDecorationsRef.current = editorRef.current.deltaDecorations(
+      debugLineDecorationsRef.current,
+      [{
+        range: new monacoRef.current.Range(highlightLine, 1, highlightLine, 1),
+        options: {
+          isWholeLine: true,
+          className: "debugLineHighlight",
+        },
+      }]
+    );
+  };
+
+  const getBreakpoints = () => {
+    return Array.from(breakpointsRef.current).sort((a, b) => a - b);
+  };
+
+  return (
+    <Editor
+      height="400px"
+      theme={theme || "vs-dark"}
+      id={id}
+      language={language || "plaintext"}
+      value={value}
+      onChange={onChange}
+      onInput={onInput}
+      options={{
+        readOnly: is_readonly,
+        domReadOnly: is_readonly,
+        minimap: { enabled: false },
+        glyphMargin: { isDebuggable }, // needed for gutter icons
+      }}
+      onMount={handleEditorDidMount}
+    />
+  );
+};
 
 const ServerRequestButton = ({ caption, handleClick }) => {
   return (
@@ -448,7 +526,6 @@ function loadURLParams(){
     result.asm = hexToAsm(result.hex);
     result.python = asmToPy(result.asm);
     result.cpp = hexToCpp(result.hex);
-    result.debug = asmToDebug(result.asm);
     result.info = result.hex ? `${(cleanHex(result.hex).length / 2).toString()} bytes` : "";
   } catch (e) {
     result.info = "";
@@ -465,12 +542,12 @@ export default function App() {
   const [hex, setHex] = useState(params.hex? params.hex : "");
   const [python, setPython] = useState(params.python? params.python : "");
   const [cpp, setCpp] = useState(params.cpp? params.cpp : "");
-  const [debug, setDebug] = useState("");
   const [error, setError] = useState(params.error? params.error : "");
   const [info, setInfo] = useState(params.info? params.info : "");
   const [tests, setTests] = useState([]);
   const [stackData, setStackData] = useState("");
   const [searchParams, setSearchParams] = useSearchParams(); // Now useLocation can be used here
+  const [debugLine, setDebugLine] = useState();
 
   const debAsm = useDebounced(asm);
   const debHex = useDebounced(hex);
@@ -511,7 +588,7 @@ export default function App() {
       body: JSON.stringify({ input: hex })
     });
     const data = await response.json();
-    setStackData(data.stack.join("\n"));
+    setStackData(data.stack.join('\n'));
     console.log("Result from C++:", data);
     if( data.status == "success" ) setInfo( "✅ Success!" );
     else if( data.status == "error") setInfo("⚠️ " + data.error);
@@ -547,7 +624,6 @@ export default function App() {
       setHex(newHex);
       setPython(asmToPy(debAsm));
       setCpp(hexToCpp(newHex));
-      setDebug(asmToDebug(debAsm));
       setError("");
       setInfo(newHex ? `${(newHex.length / 2).toString()} bytes` : "");
       if( searchParams.get("hex") != newHex)
@@ -566,7 +642,6 @@ export default function App() {
       setAsm(newAsm);
       setPython(asmToPy(newAsm));
       setCpp(hexToCpp(debHex));
-      setDebug(asmToDebug(newAsm));
       setError("");
       setInfo(debHex.trim() ? `${(cleanHex(debHex).length / 2).toString()} bytes` : "");
       if( searchParams.get("hex") != cleanHex(debHex) )
@@ -619,62 +694,40 @@ export default function App() {
 
         <div style={{ width: "100%" }}>
           <Card className="tabs-frame">
-            <div className="p-3 flex items-center gap-2">
-              <TabButton id="tab-ASM" is_active={activeTab === "ASM"} onClick={() => {
+            <div className="p-3 flex items-center gap-2 float-left">
+              <TabButton id="tab-ASM" active={activeTab === "ASM"} onClick={() => {
                 if( !error ) {
-                  document.getElementById("tab-" + activeTab).classList.remove("active");
                   setActiveTab("ASM");
-                  document.getElementById("tab-ASM").classList.add("active");
-                } else {
-                  document.getElementById("tab-" + activeTab).focus();
                 }
               }}>
                 ASM
               </TabButton>
               <TabButton id="tab-HEX" active={activeTab === "HEX"} onClick={() => {
                 if( !error ) {
-                  document.getElementById("tab-" + activeTab).classList.remove("active");
                   setActiveTab("HEX");
-                  document.getElementById("tab-HEX").classList.add("active");
-                } else {
-                  document.getElementById("tab-HEX").focus();
                 }
               }}>
                 HEX
               </TabButton>
               <TabButton id="tab-PYTHON" active={activeTab === "PYTHON"} onClick={() => {
                 if( !error ) {
-                  document.getElementById("tab-" + activeTab).classList.remove("active");
                   setActiveTab("PYTHON");
-                  document.getElementById("tab-PYTHON").classList.add("active");
-                } else {
-                  document.getElementById("tab-PYTHON").focus();
                 }
               }}>
                 PYTHON
               </TabButton>
               <TabButton id="tab-CPP" active={activeTab === "CPP"} onClick={() => {
                 if( !error ) {
-                  document.getElementById("tab-" + activeTab).classList.remove("active");
                   setActiveTab("CPP");
-                  document.getElementById("tab-CPP").classList.add("active");
-                } else {
-                  document.getElementById("tab-CPP").focus();
                 }
               }}>
                 CPP
               </TabButton>
-              <TabButton id="tab-DEBUG" active={activeTab === "DEBUG"} onClick={() => {
-                if( !error ) {
-                  document.getElementById("tab-" + activeTab).classList.remove("active");
-                  setActiveTab("DEBUG");
-                  document.getElementById("tab-DEBUG").classList.add("active");
-                } else {
-                  document.getElementById("tab-DEBUG").focus();
-                }
-              }}>
-                DEBUG
-              </TabButton>
+            </div>
+            <div className="float-right" style={{ marginRight: "16px" }}>
+              <button className="debug-button" title="Execute one step" onClick={()=>{setDebugLine(debugLine? debugLine+1 : 1)}}>&rarr;</button>
+              <button className="debug-button" title="Execute until breakpoint">&darr;</button>
+              <button className="debug-button" title="Execute until the end of execution">&darr;&darr;</button>
             </div>
 
             <AnimatePresence mode="wait">
@@ -692,6 +745,8 @@ export default function App() {
                     value={asm}
                     onChange={(e) => {setAsm(e)}}
                     placeholder="e.g. OP_DUP OP_HASH160 <pubKeyHash> OP_EQUALVERIFY OP_CHECKSIG"
+                    isDebuggable={true}
+                    highlightLine={debugLine}
                   />
                 </motion.div>
               ) : activeTab === "HEX" ? (
@@ -733,7 +788,7 @@ export default function App() {
                     is_readonly={true}
                   />
                 </motion.div>
-              ) : activeTab === "CPP" ? (
+              ) : (
                 <motion.div
                   key="cpp"
                   initial={{ opacity: 0, y: 6 }}
@@ -747,23 +802,6 @@ export default function App() {
                     value={cpp}
                     onChange={(e) => {setCpp(e.target.value)}}
                     placeholder="e.g. C++ <code>"
-                    is_readonly={true}
-                  />
-                </motion.div>
-              ) : (
-                <motion.div
-                  key="debug"
-                  initial={{ opacity: 0, y: 6 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -6 }}
-                  transition={{ duration: 0.0 }}
-                >
-                  <SimpleEditor
-                    language={"bitcoin-script"}
-                    id="editor-DEBUG"
-                    value={debug}
-                    onChange={(e) => {setDebug(e.target.value)}}
-                    placeholder="e.g. DEBUG <code>"
                     is_readonly={true}
                   />
                 </motion.div>
@@ -791,7 +829,7 @@ export default function App() {
             </div>
           </Card>
             <div className="buttons-container">
-            <div className="float-left">
+            <div className="float-left" width="50%">
               {error && (
                 <div className="px-4 pb-4 text-sm text-red-600">
                   ⚠️ {error}
@@ -804,6 +842,7 @@ export default function App() {
             </div>
             </div>
         </div>
+        <div> Place for debug buttons </div>
 
         <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
           <Card className="p-4">
