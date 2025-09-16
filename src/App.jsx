@@ -371,15 +371,57 @@ const SimpleEditor = ({
   theme,
   isDebuggable,
   highlightLine,
-  breakpoints
+  onBreakpointsChange
 }) => {
   useEffect(() => {updateDebugLine(highlightLine) }, [highlightLine]);
 
   const editorRef = useRef(null);
   const monacoRef = useRef(null);
-  const breakpointsRef = useRef(breakpoints? new Set(): breakpoints);
+  const breakpointsRef = useRef(new Set());
   const breakpointsDecorationsRef = useRef([]);
   const debugLineDecorationsRef = useRef([]);
+
+  let previousBreakpoints = [];
+
+  // ---- notify parent of current breakpoints (derived from decoration IDs) ----
+  const notifyParent = () => {
+    const model = editorRef.current.getModel();
+    if (!model) return;
+    const lines = breakpointsDecorationsRef.current
+      .map(id => model.getDecorationRange(id)?.startLineNumber)
+      .filter((n) => typeof n === "number")
+      .sort((a, b) => a - b);
+    const same =
+      lines.length === previousBreakpoints.length &&
+      lines.every((v, i) => v === previousBreakpoints[i]);
+
+    if( !same){
+      onBreakpointsChange?.(lines);
+      previousBreakpoints = lines;
+    }
+  };
+
+  // ---- helper (define it BEFORE using it) ----
+  function makeBpDescriptor(rangeOrRangeLike) {
+    // Accept either a real monaco.Range or a plain object with startLineNumber...
+    const range =
+      rangeOrRangeLike instanceof monaco.Range
+        ? rangeOrRangeLike
+        : new monaco.Range(
+            rangeOrRangeLike.startLineNumber,
+            rangeOrRangeLike.startColumn || 1,
+            rangeOrRangeLike.endLineNumber,
+            rangeOrRangeLike.endColumn || 1
+          );
+
+    return {
+      range,
+      options: {
+        isWholeLine: true,
+        glyphMarginClassName: "myBreakpoint" // change to your CSS class
+      }
+    };
+  }
 
   const handleEditorDidMount = (editor, monaco) => {
     if( isDebuggable !== true ) return;
@@ -390,34 +432,53 @@ const SimpleEditor = ({
     editor.onMouseDown((e) => {
       if( isDebuggable !== true ) return;
       if (e.target.type === monaco.editor.MouseTargetType.GUTTER_GLYPH_MARGIN) {
+        const model = editor.getModel(); // Check if model is available
+        if (!model) return;
+
         const line = e.target.position.lineNumber;
 
-        if (breakpointsRef.current.has(line)) {
-          breakpointsRef.current.delete(line);
+        // Build descriptors for current decorations (skip any stale IDs)
+        const currentDescriptors = breakpointsDecorationsRef.current
+          .map(id => {
+            const r = model.getDecorationRange(id);
+            return r ? makeBpDescriptor(r) : null;
+          }).filter(Boolean);
+
+        // Find whether there is an existing decoration on that exact startLineNumber
+        const existingIndex = currentDescriptors.findIndex(d => d.range.startLineNumber === line);
+
+        // Build desired descriptors after toggle (remove existing or add new)
+        let newDescriptors;
+        if (existingIndex >= 0) {
+          // remove the descriptor at existingIndex
+          newDescriptors = currentDescriptors.filter((_, idx) => idx !== existingIndex);
         } else {
-          breakpointsRef.current.add(line);
+          // add new breakpoint descriptor
+          newDescriptors = [
+            ...currentDescriptors,
+            makeBpDescriptor(new monaco.Range(line, 1, line, 1))
+          ];
         }
 
-        updateBreakpointsDecoration();
+        // Update decorations in the editor and keep new IDs
+        breakpointsDecorationsRef.current = editor.deltaDecorations(
+          breakpointsDecorationsRef.current,
+          newDescriptors
+        );
+
+        // Notify parent with fresh list of breakpoints
+        notifyParent();
       }
     });
+
+    const model = editorRef.current.getModel();
+    const contentListener = model?.onDidChangeContent(() => {
+      // just recompute lines from decoration ids
+      notifyParent();
+    });
+    notifyParent();
+
     updateDebugLine();
-  };
-
-  const updateBreakpointsDecoration = () => {
-    if( isDebuggable !== true ) return;
-    if (!editorRef.current || !monacoRef.current) return;
-
-    breakpointsDecorationsRef.current = editorRef.current.deltaDecorations(
-      breakpointsDecorationsRef.current,
-      Array.from(breakpointsRef.current).map((line) => ({
-        range: new monacoRef.current.Range(line, 1, line, 1),
-        options: {
-          isWholeLine: true,
-          glyphMarginClassName: "myBreakpoint",
-        },
-      }))
-    );
   };
 
   const updateDebugLine = () => {
@@ -437,9 +498,6 @@ const SimpleEditor = ({
     );
   };
 
-  const getBreakpoints = () => {
-    return Array.from(breakpointsRef.current).sort((a, b) => a - b);
-  };
 
   return (
     <Editor
@@ -549,11 +607,14 @@ export default function App() {
   const [stackData, setStackData] = useState("");
   const [searchParams, setSearchParams] = useSearchParams(); // Now useLocation can be used here
   const [debugLine, setDebugLine] = useState();
+  const [breakpoints, setBreakpoints] = useState([]);
 
   const debAsm = useDebounced(asm);
   const debHex = useDebounced(hex);
 
   const monaco = useMonaco();
+
+  useEffect(()=>{console.log("Breakpoints from parents", breakpoints)}, [breakpoints]);
 
   useEffect(() => {
     if (!monaco) return;
@@ -781,6 +842,7 @@ export default function App() {
                     placeholder="e.g. OP_DUP OP_HASH160 <pubKeyHash> OP_EQUALVERIFY OP_CHECKSIG"
                     isDebuggable={true}
                     highlightLine={debugLine}
+                    onBreakpointsChange={setBreakpoints}
                   />
                 </motion.div>
               ) : activeTab === "HEX" ? (
