@@ -370,13 +370,14 @@ const SimpleEditor = ({
   language,
   theme,
   isDebuggable,
-  highlightLine
+  highlightLine,
+  breakpoints
 }) => {
   useEffect(() => {updateDebugLine(highlightLine) }, [highlightLine]);
 
   const editorRef = useRef(null);
   const monacoRef = useRef(null);
-  const breakpointsRef = useRef(new Set());
+  const breakpointsRef = useRef(breakpoints? new Set(): breakpoints);
   const breakpointsDecorationsRef = useRef([]);
   const debugLineDecorationsRef = useRef([]);
 
@@ -397,13 +398,13 @@ const SimpleEditor = ({
           breakpointsRef.current.add(line);
         }
 
-        updateBreakpoints();
+        updateBreakpointsDecoration();
       }
     });
     updateDebugLine();
   };
 
-  const updateBreakpoints = () => {
+  const updateBreakpointsDecoration = () => {
     if( isDebuggable !== true ) return;
     if (!editorRef.current || !monacoRef.current) return;
 
@@ -470,7 +471,7 @@ const ServerRequestButton = ({ caption, handleClick }) => {
 
 // -------------------- Self-tests --------------------
 function normalizeAsm(s) {
-  return s.trim().replace(/\s+/g, " ");
+  return s.trim().replace(/\s+/g, "\n");
 }
 
 function runSelfTests() {
@@ -579,8 +580,40 @@ export default function App() {
     });
   }, [monaco]);
 
+  const updateLinesArray = () => {
+    if( error ) return;
+    let lines = asm.trim().split("\n");
+    let cur = 0;
+    let lineArray = []
+    for(let i=0; i<lines.length; i++) {
+      let terms = lines[i].split(/\s+/g);
+      lineArray.push(cur);
+      for(let j=0; j<terms.length; j++){
+        let term = terms[j].trim();
+        if( term == "" ) continue;
+        if( term.startsWith("<") && term.endsWith(">") )  {
+          let l = (term.length - 2) / 2;
+          console.log("Data length push:", l);
+          if( l < 76 )
+            cur += l;
+          else if( 75 < l && l < 256 )
+            cur += 1 + l;
+          else if( 255 < l && l < 521 )
+            cur += 2 + l;
+          else
+            cur += 4 + l;
+        }
+        cur++;
+      }
+    }
+    console.log(lineArray);
+  };
+
 
   async function handleServerRequest() {
+    if(error) return;
+    //setAsm(normalizeAsm(asm));
+    normalizeData();
     // Handle the server request here
     const response = await fetch("http://localhost:3000/run-job", {
       method: "POST",
@@ -616,52 +649,43 @@ export default function App() {
     }
   }, [searchParams])
 
+  const normalizeData = () => {
+    if (activeTab === "ASM") { // only compile from active editor
+      try {
+        const newHex = debAsm.trim() ? asmToHex(debAsm) : "";
+        setHex(newHex);
+        setPython(asmToPy(debAsm));
+        setCpp(hexToCpp(newHex));
+        setError("");
+        setInfo(newHex ? `${(newHex.length / 2).toString()} bytes` : "");
+        if( searchParams.get("hex") != newHex)
+          setSearchParams(new URLSearchParams(newHex == "" ? {} : { hex: newHex }));
+      } catch (e) {
+        setInfo("");
+        setError(e.message || String(e));
+      }
+    } else {
+      try {
+        const newHex = debHex ? cleanHex(debHex) : "";
+        let newAsm = asm;
+        if( asmToHex(asm) != newHex )
+          newAsm = newHex ? hexToAsm(newHex) : "";
+        setHex(newHex);
+        setAsm(newAsm);
+        setError("");
+        setInfo(newHex ? `${(cleanHex(newHex).length / 2).toString()} bytes` : "");
+      } catch (e) {
+        setInfo("");
+        setError(e.message || String(e));
+      }
+    }
+  }
+
+
   // Sync HEX when ASM changes
   useEffect(() => {
-    if (activeTab !== "ASM") return; // only compile from active editor
-    try {
-      const newHex = debAsm.trim() ? asmToHex(debAsm) : "";
-      setHex(newHex);
-      setPython(asmToPy(debAsm));
-      setCpp(hexToCpp(newHex));
-      setError("");
-      setInfo(newHex ? `${(newHex.length / 2).toString()} bytes` : "");
-      if( searchParams.get("hex") != newHex)
-        setSearchParams(new URLSearchParams(newHex == "" ? {} : { hex: newHex }));
-    } catch (e) {
-      setInfo("");
-      setError(e.message || String(e));
-    }
-  }, [debAsm, activeTab]);
-
-  // Sync ASM when HEX changes
-  useEffect(() => {
-    if (activeTab !== "HEX") return;
-    try {
-      const newAsm = debHex.trim() ? hexToAsm(debHex) : "";
-      setAsm(newAsm);
-      setPython(asmToPy(newAsm));
-      setCpp(hexToCpp(debHex));
-      setError("");
-      setInfo(debHex.trim() ? `${(cleanHex(debHex).length / 2).toString()} bytes` : "");
-      if( searchParams.get("hex") != cleanHex(debHex) )
-        setSearchParams(new URLSearchParams(debHex == "" ? {} : { hex: debHex }));
-    } catch (e) {
-      setInfo("");
-      setError(e.message || String(e));
-    }
-  }, [debHex, activeTab]);
-
-  const onCopy = async () => {
-    const text = activeTab === "ASM" ? asm : hex;
-    try {
-      await navigator.clipboard.writeText(text);
-      setInfo("Copied to clipboard");
-      setTimeout(() => setInfo(""), 1200);
-    } catch {
-      setError("Clipboard copy failed");
-    }
-  };
+    normalizeData();
+  }, [activeTab, debAsm, debHex]);
 
   const onPaste = async () => {
     try {
@@ -686,6 +710,15 @@ export default function App() {
     setActiveTab("ASM");
     setAsm(s.asm);
   };
+
+  const oneDebugStep = (line) => {
+    normalizeData(debHex);
+    // setAsm(normalizeAsm(asm));
+    if( error ) return;
+    setActiveTab("ASM");
+    updateLinesArray();
+    setDebugLine(debugLine? debugLine+1 : 1)
+  }
 
   return (
     <div className="min-h-screen w-full bg-gray-50 text-gray-900 antialiased p-4">
@@ -725,7 +758,8 @@ export default function App() {
               </TabButton>
             </div>
             <div className="float-right" style={{ marginRight: "16px" }}>
-              <button className="debug-button" title="Execute one step" onClick={()=>{setDebugLine(debugLine? debugLine+1 : 1)}}>&rarr;</button>
+              <button className="debug-button" title="Start again" onClick={()=>{setDebugLine(1)}}>&larr;</button>
+              <button className="debug-button" title="Execute one step" onClick={()=>{oneDebugStep();}}>&rarr;</button>
               <button className="debug-button" title="Execute until breakpoint">&darr;</button>
               <button className="debug-button" title="Execute until the end of execution">&darr;&darr;</button>
             </div>
