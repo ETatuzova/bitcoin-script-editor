@@ -371,6 +371,7 @@ const SimpleEditor = ({
   theme,
   isDebuggable,
   highlightLine,
+  breakpoints,
   onBreakpointsChange
 }) => {
   useEffect(() => {updateDebugLine(highlightLine) }, [highlightLine]);
@@ -387,10 +388,13 @@ const SimpleEditor = ({
   const notifyParent = () => {
     const model = editorRef.current.getModel();
     if (!model) return;
-    const lines = breakpointsDecorationsRef.current
-      .map(id => model.getDecorationRange(id)?.startLineNumber)
-      .filter((n) => typeof n === "number")
-      .sort((a, b) => a - b);
+    const lines = Array.from(
+      new Set(
+        breakpointsDecorationsRef.current
+          .map(id => model.getDecorationRange(id)?.startLineNumber)
+          .filter((n) => typeof n === "number")
+      )
+    ).sort((a, b) => a - b);
     const same =
       lines.length === previousBreakpoints.length &&
       lines.every((v, i) => v === previousBreakpoints[i]);
@@ -449,9 +453,10 @@ const SimpleEditor = ({
 
         // Build desired descriptors after toggle (remove existing or add new)
         let newDescriptors;
+        let startLines = new Set(currentDescriptors.map(d => d.range.startLineNumber));
         if (existingIndex >= 0) {
-          // remove the descriptor at existingIndex
-          newDescriptors = currentDescriptors.filter((_, idx) => idx !== existingIndex);
+          // remove the descriptor at startLineNumber
+          newDescriptors = currentDescriptors.filter(d => d.range.startLineNumber !== line );
         } else {
           // add new breakpoint descriptor
           newDescriptors = [
@@ -476,8 +481,18 @@ const SimpleEditor = ({
       // just recompute lines from decoration ids
       notifyParent();
     });
-    notifyParent();
 
+    let initialDescriptors = [];
+    for( let line of breakpoints ) {
+      initialDescriptors.push(makeBpDescriptor(new monaco.Range(line, 1, line, 1)));
+    }
+    // Update decorations in the editor and keep new IDs
+    breakpointsDecorationsRef.current = editor.deltaDecorations(
+      breakpointsDecorationsRef.current,
+      initialDescriptors
+    );
+
+    notifyParent();
     updateDebugLine();
   };
 
@@ -641,7 +656,7 @@ export default function App() {
     });
   }, [monaco]);
 
-  const updateLinesArray = () => {
+  const computeLineArray = () => {
     if( error ) return;
     let lines = asm.trim().split("\n");
     let cur = 0;
@@ -654,7 +669,6 @@ export default function App() {
         if( term == "" ) continue;
         if( term.startsWith("<") && term.endsWith(">") )  {
           let l = (term.length - 2) / 2;
-          console.log("Data length push:", l);
           if( l < 76 )
             cur += l;
           else if( 75 < l && l < 256 )
@@ -667,9 +681,16 @@ export default function App() {
         cur++;
       }
     }
-    console.log(lineArray);
+    return lineArray;
   };
 
+  const computeBreakpointBytePositions = (lineArray) => {
+    const bytePositions = [];
+    for( let bp of breakpoints ) {
+      bytePositions.push(lineArray[bp - 1]);
+    }
+    return bytePositions;
+  }
 
   async function handleServerRequest() {
     if(error) return;
@@ -777,7 +798,7 @@ export default function App() {
     // setAsm(normalizeAsm(asm));
     if( error ) return;
     setActiveTab("ASM");
-    updateLinesArray();
+    computeLineArray();
     setDebugLine(debugLine? debugLine+1 : 1)
   }
 
@@ -821,7 +842,7 @@ export default function App() {
             <div className="float-right" style={{ marginRight: "16px" }}>
               <button className="debug-button" title="Start again" onClick={()=>{setDebugLine(1)}}>&larr;</button>
               <button className="debug-button" title="Execute one step" onClick={()=>{oneDebugStep();}}>&rarr;</button>
-              <button className="debug-button" title="Execute until breakpoint">&darr;</button>
+              <button className="debug-button" title="Execute until breakpoint" onClick={()=>{console.log(computeBreakpointBytePositions(computeLineArray()));}}>&darr;</button>
               <button className="debug-button" title="Execute until the end of execution">&darr;&darr;</button>
             </div>
 
@@ -842,6 +863,7 @@ export default function App() {
                     placeholder="e.g. OP_DUP OP_HASH160 <pubKeyHash> OP_EQUALVERIFY OP_CHECKSIG"
                     isDebuggable={true}
                     highlightLine={debugLine}
+                    breakpoints={breakpoints}
                     onBreakpointsChange={setBreakpoints}
                   />
                 </motion.div>
