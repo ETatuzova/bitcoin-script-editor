@@ -620,6 +620,7 @@ export default function App() {
   const [info, setInfo] = useState(params.info? params.info : "");
   const [tests, setTests] = useState([]);
   const [stackData, setStackData] = useState("");
+  const [altStackData, setAltStackData] = useState("");
   const [searchParams, setSearchParams] = useSearchParams(); // Now useLocation can be used here
   const [debugLine, setDebugLine] = useState();
   const [breakpoints, setBreakpoints] = useState([]);
@@ -703,7 +704,8 @@ export default function App() {
       body: JSON.stringify({ input: hex })
     });
     const data = await response.json();
-    setStackData(data.stack.join('\n'));
+    setStackData(data.trace[data.trace.length - 1].stack.join('\n'));
+    setAltStackData(data.trace[data.trace.length - 1].altstack.join('\n'));
     console.log("Result from C++:", data);
     if( data.status == "success" ) setInfo( "✅ Success!" );
     else if( data.status == "error") setInfo("⚠️ " + data.error);
@@ -942,6 +944,7 @@ export default function App() {
               <TabButton>AltStack</TabButton>
               <SimpleEditor
                 placeholder="AltStack"
+                value={altStackData}
                 is_readonly={true}
               />
             </div>
