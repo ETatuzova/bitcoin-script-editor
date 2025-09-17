@@ -370,7 +370,9 @@ const SimpleEditor = ({
   language,
   theme,
   isDebuggable,
-  highlightLine
+  highlightLine,
+  breakpoints,
+  onBreakpointsChange
 }) => {
   useEffect(() => {updateDebugLine(highlightLine) }, [highlightLine]);
 
@@ -379,6 +381,51 @@ const SimpleEditor = ({
   const breakpointsRef = useRef(new Set());
   const breakpointsDecorationsRef = useRef([]);
   const debugLineDecorationsRef = useRef([]);
+
+  let previousBreakpoints = [];
+
+  // ---- notify parent of current breakpoints (derived from decoration IDs) ----
+  const notifyParent = () => {
+    const model = editorRef.current.getModel();
+    if (!model) return;
+    const lines = Array.from(
+      new Set(
+        breakpointsDecorationsRef.current
+          .map(id => model.getDecorationRange(id)?.startLineNumber)
+          .filter((n) => typeof n === "number")
+      )
+    ).sort((a, b) => a - b);
+    const same =
+      lines.length === previousBreakpoints.length &&
+      lines.every((v, i) => v === previousBreakpoints[i]);
+
+    if( !same){
+      onBreakpointsChange?.(lines);
+      previousBreakpoints = lines;
+    }
+  };
+
+  // ---- helper (define it BEFORE using it) ----
+  function makeBpDescriptor(rangeOrRangeLike) {
+    // Accept either a real monaco.Range or a plain object with startLineNumber...
+    const range =
+      rangeOrRangeLike instanceof monaco.Range
+        ? rangeOrRangeLike
+        : new monaco.Range(
+            rangeOrRangeLike.startLineNumber,
+            rangeOrRangeLike.startColumn || 1,
+            rangeOrRangeLike.endLineNumber,
+            rangeOrRangeLike.endColumn || 1
+          );
+
+    return {
+      range,
+      options: {
+        isWholeLine: true,
+        glyphMarginClassName: "myBreakpoint" // change to your CSS class
+      }
+    };
+  }
 
   const handleEditorDidMount = (editor, monaco) => {
     if( isDebuggable !== true ) return;
@@ -389,34 +436,64 @@ const SimpleEditor = ({
     editor.onMouseDown((e) => {
       if( isDebuggable !== true ) return;
       if (e.target.type === monaco.editor.MouseTargetType.GUTTER_GLYPH_MARGIN) {
+        const model = editor.getModel(); // Check if model is available
+        if (!model) return;
+
         const line = e.target.position.lineNumber;
 
-        if (breakpointsRef.current.has(line)) {
-          breakpointsRef.current.delete(line);
+        // Build descriptors for current decorations (skip any stale IDs)
+        const currentDescriptors = breakpointsDecorationsRef.current
+          .map(id => {
+            const r = model.getDecorationRange(id);
+            return r ? makeBpDescriptor(r) : null;
+          }).filter(Boolean);
+
+        // Find whether there is an existing decoration on that exact startLineNumber
+        const existingIndex = currentDescriptors.findIndex(d => d.range.startLineNumber === line);
+
+        // Build desired descriptors after toggle (remove existing or add new)
+        let newDescriptors;
+        let startLines = new Set(currentDescriptors.map(d => d.range.startLineNumber));
+        if (existingIndex >= 0) {
+          // remove the descriptor at startLineNumber
+          newDescriptors = currentDescriptors.filter(d => d.range.startLineNumber !== line );
         } else {
-          breakpointsRef.current.add(line);
+          // add new breakpoint descriptor
+          newDescriptors = [
+            ...currentDescriptors,
+            makeBpDescriptor(new monaco.Range(line, 1, line, 1))
+          ];
         }
 
-        updateBreakpoints();
+        // Update decorations in the editor and keep new IDs
+        breakpointsDecorationsRef.current = editor.deltaDecorations(
+          breakpointsDecorationsRef.current,
+          newDescriptors
+        );
+
+        // Notify parent with fresh list of breakpoints
+        notifyParent();
       }
     });
-    updateDebugLine();
-  };
 
-  const updateBreakpoints = () => {
-    if( isDebuggable !== true ) return;
-    if (!editorRef.current || !monacoRef.current) return;
+    const model = editorRef.current.getModel();
+    const contentListener = model?.onDidChangeContent(() => {
+      // just recompute lines from decoration ids
+      notifyParent();
+    });
 
-    breakpointsDecorationsRef.current = editorRef.current.deltaDecorations(
+    let initialDescriptors = [];
+    for( let line of breakpoints ) {
+      initialDescriptors.push(makeBpDescriptor(new monaco.Range(line, 1, line, 1)));
+    }
+    // Update decorations in the editor and keep new IDs
+    breakpointsDecorationsRef.current = editor.deltaDecorations(
       breakpointsDecorationsRef.current,
-      Array.from(breakpointsRef.current).map((line) => ({
-        range: new monacoRef.current.Range(line, 1, line, 1),
-        options: {
-          isWholeLine: true,
-          glyphMarginClassName: "myBreakpoint",
-        },
-      }))
+      initialDescriptors
     );
+
+    notifyParent();
+    updateDebugLine();
   };
 
   const updateDebugLine = () => {
@@ -436,9 +513,6 @@ const SimpleEditor = ({
     );
   };
 
-  const getBreakpoints = () => {
-    return Array.from(breakpointsRef.current).sort((a, b) => a - b);
-  };
 
   return (
     <Editor
@@ -470,7 +544,7 @@ const ServerRequestButton = ({ caption, handleClick }) => {
 
 // -------------------- Self-tests --------------------
 function normalizeAsm(s) {
-  return s.trim().replace(/\s+/g, " ");
+  return s.trim().replace(/\s+/g, "\n");
 }
 
 function runSelfTests() {
@@ -548,11 +622,14 @@ export default function App() {
   const [stackData, setStackData] = useState("");
   const [searchParams, setSearchParams] = useSearchParams(); // Now useLocation can be used here
   const [debugLine, setDebugLine] = useState();
+  const [breakpoints, setBreakpoints] = useState([]);
 
   const debAsm = useDebounced(asm);
   const debHex = useDebounced(hex);
 
   const monaco = useMonaco();
+
+  useEffect(()=>{console.log("Breakpoints from parents", breakpoints)}, [breakpoints]);
 
   useEffect(() => {
     if (!monaco) return;
@@ -579,8 +656,46 @@ export default function App() {
     });
   }, [monaco]);
 
+  const computeLineArray = () => {
+    if( error ) return;
+    let lines = asm.trim().split("\n");
+    let cur = 0;
+    let lineArray = []
+    for(let i=0; i<lines.length; i++) {
+      let terms = lines[i].split(/\s+/g);
+      lineArray.push(cur);
+      for(let j=0; j<terms.length; j++){
+        let term = terms[j].trim();
+        if( term == "" ) continue;
+        if( term.startsWith("<") && term.endsWith(">") )  {
+          let l = (term.length - 2) / 2;
+          if( l < 76 )
+            cur += l;
+          else if( 75 < l && l < 256 )
+            cur += 1 + l;
+          else if( 255 < l && l < 521 )
+            cur += 2 + l;
+          else
+            cur += 4 + l;
+        }
+        cur++;
+      }
+    }
+    return lineArray;
+  };
+
+  const computeBreakpointBytePositions = (lineArray) => {
+    const bytePositions = [];
+    for( let bp of breakpoints ) {
+      bytePositions.push(lineArray[bp - 1]);
+    }
+    return bytePositions;
+  }
 
   async function handleServerRequest() {
+    if(error) return;
+    //setAsm(normalizeAsm(asm));
+    normalizeData();
     // Handle the server request here
     const response = await fetch("http://localhost:3000/run-job", {
       method: "POST",
@@ -616,52 +731,43 @@ export default function App() {
     }
   }, [searchParams])
 
+  const normalizeData = () => {
+    if (activeTab === "ASM") { // only compile from active editor
+      try {
+        const newHex = debAsm.trim() ? asmToHex(debAsm) : "";
+        setHex(newHex);
+        setPython(asmToPy(debAsm));
+        setCpp(hexToCpp(newHex));
+        setError("");
+        setInfo(newHex ? `${(newHex.length / 2).toString()} bytes` : "");
+        if( searchParams.get("hex") != newHex)
+          setSearchParams(new URLSearchParams(newHex == "" ? {} : { hex: newHex }));
+      } catch (e) {
+        setInfo("");
+        setError(e.message || String(e));
+      }
+    } else {
+      try {
+        const newHex = debHex ? cleanHex(debHex) : "";
+        let newAsm = asm;
+        if( asmToHex(asm) != newHex )
+          newAsm = newHex ? hexToAsm(newHex) : "";
+        setHex(newHex);
+        setAsm(newAsm);
+        setError("");
+        setInfo(newHex ? `${(cleanHex(newHex).length / 2).toString()} bytes` : "");
+      } catch (e) {
+        setInfo("");
+        setError(e.message || String(e));
+      }
+    }
+  }
+
+
   // Sync HEX when ASM changes
   useEffect(() => {
-    if (activeTab !== "ASM") return; // only compile from active editor
-    try {
-      const newHex = debAsm.trim() ? asmToHex(debAsm) : "";
-      setHex(newHex);
-      setPython(asmToPy(debAsm));
-      setCpp(hexToCpp(newHex));
-      setError("");
-      setInfo(newHex ? `${(newHex.length / 2).toString()} bytes` : "");
-      if( searchParams.get("hex") != newHex)
-        setSearchParams(new URLSearchParams(newHex == "" ? {} : { hex: newHex }));
-    } catch (e) {
-      setInfo("");
-      setError(e.message || String(e));
-    }
-  }, [debAsm, activeTab]);
-
-  // Sync ASM when HEX changes
-  useEffect(() => {
-    if (activeTab !== "HEX") return;
-    try {
-      const newAsm = debHex.trim() ? hexToAsm(debHex) : "";
-      setAsm(newAsm);
-      setPython(asmToPy(newAsm));
-      setCpp(hexToCpp(debHex));
-      setError("");
-      setInfo(debHex.trim() ? `${(cleanHex(debHex).length / 2).toString()} bytes` : "");
-      if( searchParams.get("hex") != cleanHex(debHex) )
-        setSearchParams(new URLSearchParams(debHex == "" ? {} : { hex: debHex }));
-    } catch (e) {
-      setInfo("");
-      setError(e.message || String(e));
-    }
-  }, [debHex, activeTab]);
-
-  const onCopy = async () => {
-    const text = activeTab === "ASM" ? asm : hex;
-    try {
-      await navigator.clipboard.writeText(text);
-      setInfo("Copied to clipboard");
-      setTimeout(() => setInfo(""), 1200);
-    } catch {
-      setError("Clipboard copy failed");
-    }
-  };
+    normalizeData();
+  }, [activeTab, debAsm, debHex]);
 
   const onPaste = async () => {
     try {
@@ -686,6 +792,15 @@ export default function App() {
     setActiveTab("ASM");
     setAsm(s.asm);
   };
+
+  const oneDebugStep = (line) => {
+    normalizeData(debHex);
+    // setAsm(normalizeAsm(asm));
+    if( error ) return;
+    setActiveTab("ASM");
+    computeLineArray();
+    setDebugLine(debugLine? debugLine+1 : 1)
+  }
 
   return (
     <div className="min-h-screen w-full bg-gray-50 text-gray-900 antialiased p-4">
@@ -725,8 +840,9 @@ export default function App() {
               </TabButton>
             </div>
             <div className="float-right" style={{ marginRight: "16px" }}>
-              <button className="debug-button" title="Execute one step" onClick={()=>{setDebugLine(debugLine? debugLine+1 : 1)}}>&rarr;</button>
-              <button className="debug-button" title="Execute until breakpoint">&darr;</button>
+              <button className="debug-button" title="Start again" onClick={()=>{setDebugLine(1)}}>&larr;</button>
+              <button className="debug-button" title="Execute one step" onClick={()=>{oneDebugStep();}}>&rarr;</button>
+              <button className="debug-button" title="Execute until breakpoint" onClick={()=>{console.log(computeBreakpointBytePositions(computeLineArray()));}}>&darr;</button>
               <button className="debug-button" title="Execute until the end of execution">&darr;&darr;</button>
             </div>
 
@@ -747,6 +863,8 @@ export default function App() {
                     placeholder="e.g. OP_DUP OP_HASH160 <pubKeyHash> OP_EQUALVERIFY OP_CHECKSIG"
                     isDebuggable={true}
                     highlightLine={debugLine}
+                    breakpoints={breakpoints}
+                    onBreakpointsChange={setBreakpoints}
                   />
                 </motion.div>
               ) : activeTab === "HEX" ? (

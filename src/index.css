@@ -109,12 +109,13 @@ button.server-request-button{
 }
 
 .myBreakpoint {
-  background: #e76969;
-  border:solid 2px #5e1212;
-  border-radius: 50%;
-  width: 12px;
-  height: 12px;
-  margin-left: 2px;
+  background-image: url("public/breakpoint.png");
+  background-position: center center;
+  background-repeat: no-repeat;
+  background-size: 15px 15px;
+  /* width: 5px;
+  height: 5spx;
+  margin-left: 2px; */
 }
 
 .monaco-editor {
