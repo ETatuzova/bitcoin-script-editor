@@ -123,6 +123,17 @@ button.server-request-button{
   border: none !important;
 }
 
-.debugLineHighlight {
-  background-color: rgba(172, 145, 202, 0.185); /* translucent green */
+.debugCommandHighlight {
+  background-color: #ac91ca2f; /* translucent green */
+  border: solid 1px #747bff;
+}
+
+.successCommandHighlight {
+  background-color: #659b6067; /* translucent green */
+  border: solid 1px #747bff;
+}
+
+.errorCommandHighlight {
+  background-color: #b33a3a67; /* translucent red */
+  border: solid 1px #747bff;
 }
