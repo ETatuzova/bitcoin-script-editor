@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useSearchParams } from 'react-router-dom';
 
 import {Editor, useMonaco} from '@monaco-editor/react';
+import {SimpleEditor} from "./SimpleEditor"
 
 
 /**
@@ -361,179 +362,6 @@ const Header = () => (
   </div>
 );
 
-const SimpleEditor = ({
-  id,
-  value,
-  onChange,
-  onInput,
-  is_readonly,
-  language,
-  theme,
-  isDebuggable,
-  highlightLine,
-  breakpoints,
-  onBreakpointsChange
-}) => {
-  useEffect(() => {updateDebugLine(highlightLine) }, [highlightLine]);
-
-  const editorRef = useRef(null);
-  const monacoRef = useRef(null);
-  const breakpointsRef = useRef(new Set());
-  const breakpointsDecorationsRef = useRef([]);
-  const debugLineDecorationsRef = useRef([]);
-
-  let previousBreakpoints = [];
-
-  // ---- notify parent of current breakpoints (derived from decoration IDs) ----
-  const notifyParent = () => {
-    const model = editorRef.current.getModel();
-    if (!model) return;
-    const lines = Array.from(
-      new Set(
-        breakpointsDecorationsRef.current
-          .map(id => model.getDecorationRange(id)?.startLineNumber)
-          .filter((n) => typeof n === "number")
-      )
-    ).sort((a, b) => a - b);
-    const same =
-      lines.length === previousBreakpoints.length &&
-      lines.every((v, i) => v === previousBreakpoints[i]);
-
-    if( !same){
-      onBreakpointsChange?.(lines);
-      previousBreakpoints = lines;
-    }
-  };
-
-  // ---- helper (define it BEFORE using it) ----
-  function makeBpDescriptor(rangeOrRangeLike) {
-    // Accept either a real monaco.Range or a plain object with startLineNumber...
-    const range =
-      rangeOrRangeLike instanceof monaco.Range
-        ? rangeOrRangeLike
-        : new monaco.Range(
-            rangeOrRangeLike.startLineNumber,
-            rangeOrRangeLike.startColumn || 1,
-            rangeOrRangeLike.endLineNumber,
-            rangeOrRangeLike.endColumn || 1
-          );
-
-    return {
-      range,
-      options: {
-        isWholeLine: true,
-        glyphMarginClassName: "myBreakpoint" // change to your CSS class
-      }
-    };
-  }
-
-  const handleEditorDidMount = (editor, monaco) => {
-    if( isDebuggable !== true ) return;
-    editorRef.current = editor;
-    monacoRef.current = monaco;
-
-    // Listen for gutter clicks
-    editor.onMouseDown((e) => {
-      if( isDebuggable !== true ) return;
-      if (e.target.type === monaco.editor.MouseTargetType.GUTTER_GLYPH_MARGIN) {
-        const model = editor.getModel(); // Check if model is available
-        if (!model) return;
-
-        const line = e.target.position.lineNumber;
-
-        // Build descriptors for current decorations (skip any stale IDs)
-        const currentDescriptors = breakpointsDecorationsRef.current
-          .map(id => {
-            const r = model.getDecorationRange(id);
-            return r ? makeBpDescriptor(r) : null;
-          }).filter(Boolean);
-
-        // Find whether there is an existing decoration on that exact startLineNumber
-        const existingIndex = currentDescriptors.findIndex(d => d.range.startLineNumber === line);
-
-        // Build desired descriptors after toggle (remove existing or add new)
-        let newDescriptors;
-        let startLines = new Set(currentDescriptors.map(d => d.range.startLineNumber));
-        if (existingIndex >= 0) {
-          // remove the descriptor at startLineNumber
-          newDescriptors = currentDescriptors.filter(d => d.range.startLineNumber !== line );
-        } else {
-          // add new breakpoint descriptor
-          newDescriptors = [
-            ...currentDescriptors,
-            makeBpDescriptor(new monaco.Range(line, 1, line, 1))
-          ];
-        }
-
-        // Update decorations in the editor and keep new IDs
-        breakpointsDecorationsRef.current = editor.deltaDecorations(
-          breakpointsDecorationsRef.current,
-          newDescriptors
-        );
-
-        // Notify parent with fresh list of breakpoints
-        notifyParent();
-      }
-    });
-
-    const model = editorRef.current.getModel();
-    const contentListener = model?.onDidChangeContent(() => {
-      // just recompute lines from decoration ids
-      notifyParent();
-    });
-
-    let initialDescriptors = [];
-    for( let line of breakpoints ) {
-      initialDescriptors.push(makeBpDescriptor(new monaco.Range(line, 1, line, 1)));
-    }
-    // Update decorations in the editor and keep new IDs
-    breakpointsDecorationsRef.current = editor.deltaDecorations(
-      breakpointsDecorationsRef.current,
-      initialDescriptors
-    );
-
-    notifyParent();
-    updateDebugLine();
-  };
-
-  const updateDebugLine = () => {
-    if( isDebuggable !== true ) return;
-    if (!editorRef.current || !monacoRef.current) return;
-    if( !highlightLine ) return;
-
-    debugLineDecorationsRef.current = editorRef.current.deltaDecorations(
-      debugLineDecorationsRef.current,
-      [{
-        range: new monacoRef.current.Range(highlightLine, 1, highlightLine, 1),
-        options: {
-          isWholeLine: true,
-          className: "debugLineHighlight",
-        },
-      }]
-    );
-  };
-
-
-  return (
-    <Editor
-      height="400px"
-      theme={theme || "vs-dark"}
-      id={id}
-      language={language || "plaintext"}
-      value={value}
-      onChange={onChange}
-      onInput={onInput}
-      options={{
-        readOnly: is_readonly,
-        domReadOnly: is_readonly,
-        minimap: { enabled: false },
-        glyphMargin: { isDebuggable }, // needed for gutter icons
-      }}
-      onMount={handleEditorDidMount}
-    />
-  );
-};
-
 const ServerRequestButton = ({ caption, handleClick }) => {
   return (
     <button onClick={handleClick} className="server-request-button">
@@ -620,9 +448,15 @@ export default function App() {
   const [info, setInfo] = useState(params.info? params.info : "");
   const [tests, setTests] = useState([]);
   const [stackData, setStackData] = useState("");
+  const [altStackData, setAltStackData] = useState("");
   const [searchParams, setSearchParams] = useSearchParams(); // Now useLocation can be used here
-  const [debugLine, setDebugLine] = useState();
+  const [debugWord, setDebugWord] = useState();
   const [breakpoints, setBreakpoints] = useState([]);
+  const [trace, setTrace] = useState(false);
+  const [previousTerms, setPreviousTerms] = useState([]);
+  const [status, setStatus] = useState(false);
+  const [currentStepStatus, setCurrentStepStatus] = useState(""); // "success" | "error" | ""
+  const [executionError, setExecutionError] = useState("");
 
   const debAsm = useDebounced(asm);
   const debHex = useDebounced(hex);
@@ -692,10 +526,11 @@ export default function App() {
     return bytePositions;
   }
 
-  async function handleServerRequest() {
+  async function handleServerRequest(is_last) {
     if(error) return;
     //setAsm(normalizeAsm(asm));
     normalizeData();
+    setPreviousTerms(debAsm.trim().split(/\s+/));
     // Handle the server request here
     const response = await fetch("http://localhost:3000/run-job", {
       method: "POST",
@@ -703,8 +538,25 @@ export default function App() {
       body: JSON.stringify({ input: hex })
     });
     const data = await response.json();
-    setStackData(data.stack.join('\n'));
-    console.log("Result from C++:", data);
+    setTrace(data.trace);
+    setStatus(data.status);
+    setExecutionError(data.status == "error" ? data.error : "");
+    if( is_last && data.trace && data.trace.length > 0 ) {
+      console.log("Set debug word to the last step");
+      setDebugWord(data.trace.length - 1);
+      setStackData(data.trace[data.trace.length - 1].stack.join('\n'));
+      setAltStackData(data.trace[data.trace.length - 1].altstack.join('\n'));
+      setCurrentStepStatus(data.status);
+    } else {
+      console.log("Set debug word to the first step");
+      setDebugWord(1);
+      setStackData(data.trace[0].stack.join('\n'));
+      setAltStackData(data.trace[0].altstack.join('\n'));
+      if( data.trace.length == 1 )
+          setCurrentStepStatus(data.status);
+      else
+          setCurrentStepStatus("");
+    }
     if( data.status == "success" ) setInfo( "✅ Success!" );
     else if( data.status == "error") setInfo("⚠️ " + data.error);
     else setInfo("");
@@ -767,6 +619,16 @@ export default function App() {
   // Sync HEX when ASM changes
   useEffect(() => {
     normalizeData();
+    if( previousTerms.join(" ") !== debAsm.trim().split(/\s+/).join(" ") ){
+      console.log("Reset debug word");
+      console.log(previousTerms);
+      console.log(debAsm.trim().split(/\s+/));
+      setDebugWord(0);
+      setTrace(false);
+      setStackData("");
+      setAltStackData("");
+      setPreviousTerms(debAsm.trim().split(/\s+/));
+    }
   }, [activeTab, debAsm, debHex]);
 
   const onPaste = async () => {
@@ -793,13 +655,46 @@ export default function App() {
     setAsm(s.asm);
   };
 
-  const oneDebugStep = (line) => {
+
+  const updateDebugHighlight = (newDebugWord) => {
+    console.log("Update debug highlight to ", newDebugWord, " from ", trace.length);
     normalizeData(debHex);
-    // setAsm(normalizeAsm(asm));
     if( error ) return;
     setActiveTab("ASM");
-    computeLineArray();
-    setDebugLine(debugLine? debugLine+1 : 1)
+    if( newDebugWord >= trace.length ) {
+      newDebugWord = trace.length;
+      setCurrentStepStatus(status);
+      if( status === "success" )
+        setInfo( "✅ Success!" );
+      else
+        setInfo("⚠️ " + executionError);
+      console.log("Draw last step", currentStepStatus, " => ", status);
+      setDebugWord(newDebugWord-2);
+    } else {
+      setCurrentStepStatus("");
+      setDebugWord(newDebugWord);
+    }
+    setStackData(trace[newDebugWord - 1].stack.join('\n'));
+    setAltStackData(trace[newDebugWord - 1].altstack.join('\n'));
+  }
+
+  const debugForward = () => {
+    if( !trace || trace.length == 0 ) {
+      handleServerRequest();
+    } else {
+      updateDebugHighlight(debugWord? debugWord + 1 : 1);
+    }
+  }
+
+  const debugBackward = () => {
+    if( !trace || trace.length == 0 ) {
+      handleServerRequest();
+    } else if( currentStepStatus != "" ) {
+      setCurrentStepStatus("");
+      updateDebugHighlight(trace.length-1);
+    } else {
+      updateDebugHighlight(debugWord > 1? debugWord - 1 : 1);
+    }
   }
 
   return (
@@ -840,8 +735,8 @@ export default function App() {
               </TabButton>
             </div>
             <div className="float-right" style={{ marginRight: "16px" }}>
-              <button className="debug-button" title="Start again" onClick={()=>{setDebugLine(1)}}>&larr;</button>
-              <button className="debug-button" title="Execute one step" onClick={()=>{oneDebugStep();}}>&rarr;</button>
+              <button className="debug-button" title="Start again" onClick={()=>{debugBackward();}}>&larr;</button>
+              <button className="debug-button" title="Execute one step" onClick={()=>{debugForward();}}>&rarr;</button>
               <button className="debug-button" title="Execute until breakpoint" onClick={()=>{console.log(computeBreakpointBytePositions(computeLineArray()));}}>&darr;</button>
               <button className="debug-button" title="Execute until the end of execution">&darr;&darr;</button>
             </div>
@@ -860,11 +755,11 @@ export default function App() {
                     language={"bitcoin-script"}
                     value={asm}
                     onChange={(e) => {setAsm(e)}}
-                    placeholder="e.g. OP_DUP OP_HASH160 <pubKeyHash> OP_EQUALVERIFY OP_CHECKSIG"
                     isDebuggable={true}
-                    highlightLine={debugLine}
+                    highlightWord={debugWord}
                     breakpoints={breakpoints}
                     onBreakpointsChange={setBreakpoints}
+                    status={currentStepStatus}
                   />
                 </motion.div>
               ) : activeTab === "HEX" ? (
@@ -942,6 +837,7 @@ export default function App() {
               <TabButton>AltStack</TabButton>
               <SimpleEditor
                 placeholder="AltStack"
+                value={altStackData}
                 is_readonly={true}
               />
             </div>
@@ -956,11 +852,10 @@ export default function App() {
               <div className="ml-auto text-xs text-gray-500">{info}</div>
             </div>
             <div className="float-right">
-              <ServerRequestButton caption="Run script on server" handleClick={handleServerRequest}/>
+              <ServerRequestButton caption="Run script on server" handleClick={() => {handleServerRequest(true)}}/>
             </div>
             </div>
         </div>
-        <div> Place for debug buttons </div>
 
         <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
           <Card className="p-4">
