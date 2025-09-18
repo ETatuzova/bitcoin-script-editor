@@ -16,9 +16,11 @@ export const SimpleEditor = ({
   highlightWord,
   breakpoints,
   onBreakpointsChange,
-  isSuccess
+  status
 }) => {
-  useEffect(() => {highlightCurrent(highlightWord); }, [highlightWord]);
+  useEffect(() => {highlightCurrent(highlightWord); console.log("Highlight word updated")}, [highlightWord]);
+  useEffect(() => {console.log("Status updated"); highlightCurrent(highlightWord)}, [status]);
+
 
   const editorRef = useRef(null);
   const monacoRef = useRef(null);
@@ -172,14 +174,14 @@ export const SimpleEditor = ({
   function highlightCurrent(currentIndex) {
     words = parseCommands();
     if( !words.length ) return;
-    console.log("Highlighting current command:", currentIndex);
+    console.log("Highlighting current command:", currentIndex, status);
 
     // Clear old highlight
     debugDecorationsRef.current = editorRef.current.deltaDecorations(debugDecorationsRef.current, []);
 
     if (currentIndex <= 0) return;
     // Highlight new command
-    if (currentIndex <= words.length) {
+    if (currentIndex <= words.length && status != "error" && status != "success") {
       const current = words[currentIndex-1];
       debugDecorationsRef.current = editorRef.current.deltaDecorations(debugDecorationsRef.current, [
         {
@@ -194,10 +196,10 @@ export const SimpleEditor = ({
       editorRef.current.revealRangeInCenter(current.range);
     } else {
       console.log("Highlighting last line");
-      currentIndex = words.length - 1;
-      let lineNumber = words[words.length - 1].range.endLineNumber;
+      currentIndex = currentIndex > words.length - 1? words.length - 1 : currentIndex;
+      let lineNumber = words[currentIndex].range.endLineNumber;
       let model = editorRef.current.getModel();
-      let className = isSuccess? "successCommandHighlight" : "errorCommandHighlight";
+      let className = status == "success" ? "successCommandHighlight" : "errorCommandHighlight";
       debugDecorationsRef.current = editorRef.current.deltaDecorations(debugDecorationsRef.current, [
         {
           range: new monaco.Range(lineNumber, 1, lineNumber, 1),

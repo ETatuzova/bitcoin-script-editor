@@ -455,6 +455,7 @@ export default function App() {
   const [trace, setTrace] = useState(false);
   const [previousTerms, setPreviousTerms] = useState([]);
   const [status, setStatus] = useState(false);
+  const [currentStepStatus, setCurrentStepStatus] = useState(""); // "success" | "error" | ""
   const [executionError, setExecutionError] = useState("");
 
   const debAsm = useDebounced(asm);
@@ -525,7 +526,7 @@ export default function App() {
     return bytePositions;
   }
 
-  async function handleServerRequest() {
+  async function handleServerRequest(is_last) {
     if(error) return;
     //setAsm(normalizeAsm(asm));
     normalizeData();
@@ -538,9 +539,24 @@ export default function App() {
     });
     const data = await response.json();
     setTrace(data.trace);
-    setStatus(data.status == "success");
+    setStatus(data.status);
     setExecutionError(data.status == "error" ? data.error : "");
-    console.log("Result from C++:", data);
+    if( is_last && data.trace && data.trace.length > 0 ) {
+      console.log("Set debug word to the last step");
+      setDebugWord(data.trace.length - 1);
+      setStackData(data.trace[data.trace.length - 1].stack.join('\n'));
+      setAltStackData(data.trace[data.trace.length - 1].altstack.join('\n'));
+      setCurrentStepStatus(data.status);
+    } else {
+      console.log("Set debug word to the first step");
+      setDebugWord(1);
+      setStackData(data.trace[0].stack.join('\n'));
+      setAltStackData(data.trace[0].altstack.join('\n'));
+      if( data.trace.length == 1 )
+          setCurrentStepStatus(data.status);
+      else
+          setCurrentStepStatus("");
+    }
     if( data.status == "success" ) setInfo( "✅ Success!" );
     else if( data.status == "error") setInfo("⚠️ " + data.error);
     else setInfo("");
@@ -639,32 +655,46 @@ export default function App() {
     setAsm(s.asm);
   };
 
-  const debugForward = async () => {
-    if( !trace || trace.length == 0 ) await handleServerRequest();
+
+  const updateDebugHighlight = (newDebugWord) => {
+    console.log("Update debug highlight to ", newDebugWord, " from ", trace.length);
     normalizeData(debHex);
     if( error ) return;
     setActiveTab("ASM");
-    let newDebugWord = debugWord? debugWord + 1 : 1;
-    setDebugWord(newDebugWord <= trace.length? newDebugWord : 0);
-    setStackData(trace[newDebugWord - 1].stack.join('\n'));
-    setAltStackData(trace[newDebugWord - 1].altstack.join('\n'));
-    if( newDebugWord == trace.length ){
-      if( status )
+    if( newDebugWord >= trace.length ) {
+      newDebugWord = trace.length;
+      setCurrentStepStatus(status);
+      if( status === "success" )
         setInfo( "✅ Success!" );
       else
         setInfo("⚠️ " + executionError);
+      console.log("Draw last step", currentStepStatus, " => ", status);
+      setDebugWord(newDebugWord-2);
+    } else {
+      setCurrentStepStatus("");
+      setDebugWord(newDebugWord);
+    }
+    setStackData(trace[newDebugWord - 1].stack.join('\n'));
+    setAltStackData(trace[newDebugWord - 1].altstack.join('\n'));
+  }
+
+  const debugForward = () => {
+    if( !trace || trace.length == 0 ) {
+      handleServerRequest();
+    } else {
+      updateDebugHighlight(debugWord? debugWord + 1 : 1);
     }
   }
 
-  const debugBackward = async () => {
-    if( !trace || trace.length == 0 ) await handleServerRequest();
-    normalizeData(debHex);
-    if( error ) return;
-    setActiveTab("ASM");
-    let newDebugWord = debugWord > 1? debugWord - 1 : 1;
-    setDebugWord(newDebugWord < trace.length? newDebugWord : 0);
-    setStackData(trace[newDebugWord - 1].stack.join('\n'));
-    setAltStackData(trace[newDebugWord - 1].altstack.join('\n'));
+  const debugBackward = () => {
+    if( !trace || trace.length == 0 ) {
+      handleServerRequest();
+    } else if( currentStepStatus != "" ) {
+      setCurrentStepStatus("");
+      updateDebugHighlight(trace.length-1);
+    } else {
+      updateDebugHighlight(debugWord > 1? debugWord - 1 : 1);
+    }
   }
 
   return (
@@ -725,12 +755,11 @@ export default function App() {
                     language={"bitcoin-script"}
                     value={asm}
                     onChange={(e) => {setAsm(e)}}
-                    placeholder="e.g. OP_DUP OP_HASH160 <pubKeyHash> OP_EQUALVERIFY OP_CHECKSIG"
                     isDebuggable={true}
                     highlightWord={debugWord}
                     breakpoints={breakpoints}
                     onBreakpointsChange={setBreakpoints}
-                    isSuccess={status}
+                    status={currentStepStatus}
                   />
                 </motion.div>
               ) : activeTab === "HEX" ? (
@@ -823,11 +852,10 @@ export default function App() {
               <div className="ml-auto text-xs text-gray-500">{info}</div>
             </div>
             <div className="float-right">
-              <ServerRequestButton caption="Run script on server" handleClick={() => {handleServerRequest().then(() => setDebugWord(trace.length))}}/>
+              <ServerRequestButton caption="Run script on server" handleClick={() => {handleServerRequest(true)}}/>
             </div>
             </div>
         </div>
-        <div> Place for debug buttons </div>
 
         <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
           <Card className="p-4">
