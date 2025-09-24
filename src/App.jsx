@@ -543,7 +543,7 @@ export default function App() {
     setExecutionError(data.status == "error" ? data.error : "");
     if( is_last && data.trace && data.trace.length > 0 ) {
       console.log("Set debug word to the last step");
-      setDebugWord(data.trace.length - 1);
+      setDebugWord(data.trace.length - 2);
       setStackData(data.trace[data.trace.length - 1].stack.join('\n'));
       setAltStackData(data.trace[data.trace.length - 1].altstack.join('\n'));
       setCurrentStepStatus(data.status);
@@ -675,7 +675,7 @@ export default function App() {
       setDebugWord(newDebugWord);
     }
     setStackData(trace[newDebugWord - 1].stack.join('\n'));
-    setAltStackData(trace[newDebugWord - 1].altstack.join('\n'));
+    setAltStackData(trace[newDebugWordf - 1].altstack.join('\n'));
   }
 
   const debugForward = () => {
