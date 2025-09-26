@@ -857,6 +857,8 @@ export default function App() {
             </div>
         </div>
 
+        <div width="100%"><pre>{JSON.stringify(trace, null, 2)}</pre></div>
+
         <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
           <Card className="p-4">
             <h3 className="font-medium mb-2">Tips</h3>
