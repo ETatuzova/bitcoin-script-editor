@@ -306,23 +306,23 @@ function bytesToCpp(bytes) {
 }
 
 // -------------------- UI Components --------------------
-const SAMPLES = {
-  "P2PKH (legacy)": {
-    asm: "OP_DUP OP_HASH160 <00112233445566778899aabbccddeeff00112233> OP_EQUALVERIFY OP_CHECKSIG",
-    hex: "76a91400112233445566778899aabbccddeeff0011223388ac",
-  },
-  "P2SH (redeem-hash)": {
-    asm: "OP_HASH160 <16b000aabbccddeeff00112233445566778899aa> OP_EQUAL",
-    hex: "a91416b000aabbccddeeff00112233445566778899aa87",
-  },
-  "P2WPKH (v0)": {
-    asm: "0 <00112233445566778899aabbccddeeff00112233>",
-    hex: "001400112233445566778899aabbccddeeff00112233",
-  },
-  "2-of-3 Multisig (bare)": {
-    asm: "2 <02a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1> <03b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2> <02c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3> 3 OP_CHECKMULTISIG",
-  },
-};
+// const SAMPLES = {
+//   "P2PKH (legacy)": {
+//     asm: "OP_DUP OP_HASH160 <00112233445566778899aabbccddeeff00112233> OP_EQUALVERIFY OP_CHECKSIG",
+//     hex: "76a91400112233445566778899aabbccddeeff0011223388ac",
+//   },
+//   "P2SH (redeem-hash)": {
+//     asm: "OP_HASH160 <16b000aabbccddeeff00112233445566778899aa> OP_EQUAL",
+//     hex: "a91416b000aabbccddeeff00112233445566778899aa87",
+//   },
+//   "P2WPKH (v0)": {
+//     asm: "0 <00112233445566778899aabbccddeeff00112233>",
+//     hex: "001400112233445566778899aabbccddeeff00112233",
+//   },
+//   "2-of-3 Multisig (bare)": {
+//     asm: "2 <02a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1> <03b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2> <02c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3> 3 OP_CHECKMULTISIG",
+//   },
+// };
 
 function useDebounced(value, delay = 300) {
   const [deb, setDeb] = useState(value);
@@ -375,49 +375,49 @@ function normalizeAsm(s) {
   return s.trim().replace(/\s+/g, "\n");
 }
 
-function runSelfTests() {
-  const cases = [];
+// function runSelfTests() {
+//   const cases = [];
 
-  // Provided samples
-  Object.entries(SAMPLES).forEach(([name, v]) => {
-    if (v.hex && v.asm) cases.push({ name: `${name} (asm↔hex)`, asm: v.asm, hex: v.hex });
-  });
+//   // Provided samples
+//   Object.entries(SAMPLES).forEach(([name, v]) => {
+//     if (v.hex && v.asm) cases.push({ name: `${name} (asm↔hex)`, asm: v.asm, hex: v.hex });
+//   });
 
-  // Boundary push sizes
-  const mkhex = (n) => bytesToHex(new Uint8Array(n).fill(0xab));
-  const p75 = `<${mkhex(75)}>`; // single-byte length
-  const p76 = `<${mkhex(76)}>`; // PUSHDATA1
-  const p255 = `<${mkhex(255)}>`; // PUSHDATA1
-  const p256 = `<${mkhex(256)}>`; // PUSHDATA2
+//   // Boundary push sizes
+//   const mkhex = (n) => bytesToHex(new Uint8Array(n).fill(0xab));
+//   const p75 = `<${mkhex(75)}>`; // single-byte length
+//   const p76 = `<${mkhex(76)}>`; // PUSHDATA1
+//   const p255 = `<${mkhex(255)}>`; // PUSHDATA1
+//   const p256 = `<${mkhex(256)}>`; // PUSHDATA2
 
-  cases.push({ name: "PUSH 75", asm: p75 });
-  cases.push({ name: "PUSH 76", asm: p76 });
-  cases.push({ name: "PUSH 255", asm: p255 });
-  cases.push({ name: "PUSH 256", asm: p256 });
+//   cases.push({ name: "PUSH 75", asm: p75 });
+//   cases.push({ name: "PUSH 76", asm: p76 });
+//   cases.push({ name: "PUSH 255", asm: p255 });
+//   cases.push({ name: "PUSH 256", asm: p256 });
 
-  // Small integers
-  cases.push({ name: "Small ints", asm: "0 1 2 15 16 -1" });
+//   // Small integers
+//   cases.push({ name: "Small ints", asm: "0 1 2 15 16 -1" });
 
-  // OP_RETURN with data
-  cases.push({ name: "OP_RETURN", asm: `OP_RETURN <${bytesToHex(new Uint8Array([1,2,3,4]))}>` });
+//   // OP_RETURN with data
+//   cases.push({ name: "OP_RETURN", asm: `OP_RETURN <${bytesToHex(new Uint8Array([1,2,3,4]))}>` });
 
-  const results = [];
+//   const results = [];
 
-  for (const c of cases) {
-    try {
-      const hex = c.hex ?? asmToHex(c.asm);
-      const asm = c.asm ?? hexToAsm(c.hex);
-      const rAsm = hexToAsm(hex);
-      const rHex = asmToHex(asm);
-      const pass = normalizeAsm(asm) === normalizeAsm(rAsm) && cleanHex(hex) === cleanHex(rHex);
-      results.push({ name: c.name, pass, asm, hex, rAsm, rHex, err: null });
-    } catch (e) {
-      results.push({ name: c.name, pass: false, asm: c.asm, hex: c.hex, rAsm: null, rHex: null, err: e.message || String(e) });
-    }
-  }
+//   for (const c of cases) {
+//     try {
+//       const hex = c.hex ?? asmToHex(c.asm);
+//       const asm = c.asm ?? hexToAsm(c.hex);
+//       const rAsm = hexToAsm(hex);
+//       const rHex = asmToHex(asm);
+//       const pass = normalizeAsm(asm) === normalizeAsm(rAsm) && cleanHex(hex) === cleanHex(rHex);
+//       results.push({ name: c.name, pass, asm, hex, rAsm, rHex, err: null });
+//     } catch (e) {
+//       results.push({ name: c.name, pass: false, asm: c.asm, hex: c.hex, rAsm: null, rHex: null, err: e.message || String(e) });
+//     }
+//   }
 
-  return results;
-}
+//   return results;
+// }
 
 function loadURLParams(){
   const params = new URLSearchParams(window.location.search);
@@ -446,7 +446,7 @@ export default function App() {
   const [cpp, setCpp] = useState(params.cpp? params.cpp : "");
   const [error, setError] = useState(params.error? params.error : "");
   const [info, setInfo] = useState(params.info? params.info : "");
-  const [tests, setTests] = useState([]);
+  // const [tests, setTests] = useState([]);
   const [stackData, setStackData] = useState("");
   const [altStackData, setAltStackData] = useState("");
   const [searchParams, setSearchParams] = useSearchParams(); // Now useLocation can be used here
@@ -457,13 +457,16 @@ export default function App() {
   const [status, setStatus] = useState(false);
   const [currentStepStatus, setCurrentStepStatus] = useState(""); // "success" | "error" | ""
   const [executionError, setExecutionError] = useState("");
+  const [pcWordMap, setPcWordMap] = useState({});
+  const [pc, setPc] = useState(0);
+  const [currentDebugStep, setCurrentDebugStep] = useState(0);
 
   const debAsm = useDebounced(asm);
   const debHex = useDebounced(hex);
 
   const monaco = useMonaco();
 
-  useEffect(()=>{console.log("Breakpoints from parents", breakpoints)}, [breakpoints]);
+  useEffect(()=>{}, [breakpoints]);
 
   useEffect(() => {
     if (!monaco) return;
@@ -526,36 +529,58 @@ export default function App() {
     return bytePositions;
   }
 
+  const computePcWordMap = () => {
+    let terms = asm.trim().split(/\s+/g);
+    let wordMap = {};
+    let cur = 0;
+    for (let i = 0; i < terms.length; i++) {
+      wordMap[cur] = i;
+      if( terms[i].startsWith("<") && terms[i].endsWith(">") )  {
+        let l = (terms[i].length - 2) / 2;
+        if( l < 76 )
+          cur += l;
+        else if( 75 < l && l < 256 )
+          cur += 1 + l;
+        else if( 255 < l && l < 521 )
+          cur += 2 + l;
+        else
+          cur += 4 + l;
+      }
+      cur++;
+    }
+    wordMap[cur] = terms.length - 1;
+    console.log(JSON.stringify(wordMap));
+    return wordMap;
+  }
+
   async function handleServerRequest(is_last) {
-    if(error) return;
-    //setAsm(normalizeAsm(asm));
     normalizeData();
+    if(error) return;
     setPreviousTerms(debAsm.trim().split(/\s+/));
     // Handle the server request here
+
     const response = await fetch("http://localhost:3000/run-job", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ input: hex })
+    }).catch((error) => {
+      // Your error is here!
+      setInfo("⚠️ Server connection error: " + error);
     });
+
+    if( !response || !response.ok ) return;
+
     const data = await response.json();
     setTrace(data.trace);
     setStatus(data.status);
     setExecutionError(data.status == "error" ? data.error : "");
+    let wordMap = computePcWordMap();
+    setPcWordMap(wordMap);
     if( is_last && data.trace && data.trace.length > 0 ) {
-      console.log("Set debug word to the last step");
-      setDebugWord(data.trace.length - 2);
-      setStackData(data.trace[data.trace.length - 1].stack.join('\n'));
-      setAltStackData(data.trace[data.trace.length - 1].altstack.join('\n'));
-      setCurrentStepStatus(data.status);
+      console.log("Set debug step to last ", data.trace.length);
+      updateDebugStep(data.trace.length, wordMap, data.trace, data.status);
     } else {
-      console.log("Set debug word to the first step");
-      setDebugWord(1);
-      setStackData(data.trace[0].stack.join('\n'));
-      setAltStackData(data.trace[0].altstack.join('\n'));
-      if( data.trace.length == 1 )
-          setCurrentStepStatus(data.status);
-      else
-          setCurrentStepStatus("");
+      updateDebugStep(1, wordMap, data.trace, data.status);
     }
     if( data.status == "success" ) setInfo( "✅ Success!" );
     else if( data.status == "error") setInfo("⚠️ " + data.error);
@@ -563,9 +588,9 @@ export default function App() {
   }
 
   // Run tests once at load
-  useEffect(() => {
-    setTests(runSelfTests());
-  }, []);
+  // useEffect(() => {
+  //   setTests(runSelfTests());
+  // }, []);
 
   useEffect(()=>{
     if((!searchParams.has("hex") && hex != "") || searchParams.get("hex") != hex ){
@@ -620,14 +645,13 @@ export default function App() {
   useEffect(() => {
     normalizeData();
     if( previousTerms.join(" ") !== debAsm.trim().split(/\s+/).join(" ") ){
-      console.log("Reset debug word");
-      console.log(previousTerms);
-      console.log(debAsm.trim().split(/\s+/));
       setDebugWord(0);
       setTrace(false);
       setStackData("");
       setAltStackData("");
       setPreviousTerms(debAsm.trim().split(/\s+/));
+      setPcWordMap({});
+      setPc(0);
     }
   }, [activeTab, debAsm, debHex]);
 
@@ -655,45 +679,56 @@ export default function App() {
     setAsm(s.asm);
   };
 
-
-  const updateDebugHighlight = (newDebugWord) => {
-    console.log("Update debug highlight to ", newDebugWord, " from ", trace.length);
+  // Default 0
+  const updateDebugStep = (newDebugStep, pcWordMap, trace, status) => {
     normalizeData(debHex);
     if( error ) return;
     setActiveTab("ASM");
-    if( newDebugWord >= trace.length ) {
-      newDebugWord = trace.length;
+    setCurrentDebugStep(newDebugStep);
+    if( newDebugStep == 0){
+      setPc(0);
+      setDebugWord(0);
+      setStackData("");
+      setAltStackData("");
+      setCurrentStepStatus("");
+      return;
+    }
+    let newPc = newDebugStep > trace.length ? trace[trace.length - 1].pc : trace[newDebugStep-1].pc;
+    let newDebugWord = pcWordMap[newPc.toString()];
+    if( newDebugStep >= trace.length) {
       setCurrentStepStatus(status);
+      console.log("Set to final status ", status, " newDebugStep = ", newDebugStep, " trace.length = ", trace.length);
       if( status === "success" )
         setInfo( "✅ Success!" );
       else
         setInfo("⚠️ " + executionError);
-      console.log("Draw last step", currentStepStatus, " => ", status);
-      setDebugWord(newDebugWord-2);
+      setDebugWord(newDebugWord);
+      setPc(newPc);
+      setStackData(trace[trace.length - 1].stack.join('\n'));
+      setAltStackData(trace[trace.length - 1].altstack.join('\n'));
     } else {
       setCurrentStepStatus("");
-      setDebugWord(newDebugWord);
+      setDebugWord(newDebugWord + 1);
+      setPc(newPc);
+      setStackData(trace[newDebugStep - 1].stack.join('\n'));
+      setAltStackData(trace[newDebugStep - 1].altstack.join('\n'));
     }
-    setStackData(trace[newDebugWord - 1].stack.join('\n'));
-    setAltStackData(trace[newDebugWordf - 1].altstack.join('\n'));
   }
 
   const debugForward = () => {
     if( !trace || trace.length == 0 ) {
       handleServerRequest();
     } else {
-      updateDebugHighlight(debugWord? debugWord + 1 : 1);
+      let newDebugStep = currentDebugStep >= trace.length ? trace.length : currentDebugStep + 1;
+      updateDebugStep(newDebugStep, pcWordMap, trace, status);
     }
   }
 
   const debugBackward = () => {
     if( !trace || trace.length == 0 ) {
       handleServerRequest();
-    } else if( currentStepStatus != "" ) {
-      setCurrentStepStatus("");
-      updateDebugHighlight(trace.length-1);
     } else {
-      updateDebugHighlight(debugWord > 1? debugWord - 1 : 1);
+      updateDebugStep( currentDebugStep > 1 ? currentDebugStep - 1 : 1, pcWordMap, trace, status );
     }
   }
 
@@ -857,6 +892,8 @@ export default function App() {
             </div>
         </div>
 
+        <div>PC={pc}</div>
+        <div>WORD_MAP={JSON.stringify(pcWordMap)}</div>
         <div width="100%"><pre>{JSON.stringify(trace, null, 2)}</pre></div>
 
         <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -880,7 +917,7 @@ export default function App() {
           </Card>
         </div>
 
-        <Card className="p-4 mt-6">
+        {/* <Card className="p-4 mt-6">
           <h3 className="font-medium mb-2">Self‑tests</h3>
           <div className="text-sm text-gray-700">
             <p className="mb-2">Quick checks to ensure conversions work as expected.</p>
@@ -909,7 +946,7 @@ export default function App() {
               ))}
             </div>
           </div>
-        </Card>
+        </Card> */}
       </div>
     </div>
   );

@@ -18,8 +18,8 @@ export const SimpleEditor = ({
   onBreakpointsChange,
   status
 }) => {
-  useEffect(() => {highlightCurrent(highlightWord); console.log("Highlight word updated")}, [highlightWord]);
-  useEffect(() => {console.log("Status updated"); highlightCurrent(highlightWord)}, [status]);
+  useEffect(() => {highlightCurrent(highlightWord);}, [highlightWord]);
+  useEffect(() => {highlightCurrent(highlightWord)}, [status]);
 
 
   const editorRef = useRef(null);
