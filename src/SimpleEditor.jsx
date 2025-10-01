@@ -78,6 +78,24 @@ export const SimpleEditor = ({
     editorRef.current = editor;
     monacoRef.current = monaco;
 
+    // editor.addCommand(monaco.KeyCode.Enter, function() {
+    //   const model = editor.getModel();
+    //   const sel = editor.getSelection();
+    //   const lineNumber = sel.startLineNumber;
+    //   const column = sel.startColumn;
+
+    //   // always insert newline at cursor, bypassing Monaco's default handling
+    //   editor.executeEdits('force-enter', [{
+    //     range: new monaco.Range(lineNumber, column, lineNumber, column),
+    //     text: '\n',
+    //     forceMoveMarkers: true
+    //   }]);
+
+    //   // move cursor to the new line start
+    //   editor.setPosition({ lineNumber: lineNumber + 1, column: 1 });
+    //   editor.focus();
+    // });
+
     // Listen for gutter clicks
     editor.onMouseDown((e) => {
       if( isDebuggable !== true ) return;
@@ -233,7 +251,9 @@ export const SimpleEditor = ({
         readOnly: is_readonly,
         domReadOnly: is_readonly,
         minimap: { enabled: false },
+        formatOnType: true,
         glyphMargin: { isDebuggable }, // needed for gutter icons
+        acceptSuggestionOnEnter: "off"
       }}
       onMount={handleEditorDidMount}
     />

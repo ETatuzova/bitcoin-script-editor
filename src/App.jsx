@@ -490,6 +490,92 @@ export default function App() {
       comments: {
         lineComment: "//",
       },
+      // Monaco gets confused if these arrays are empty → give it one safe pair
+      brackets: [["<", ">"]],
+      autoClosingPairs: [
+        { open: "<", close: ">" }
+      ],
+      surroundingPairs: [
+        { open: "<", close: ">" }
+      ],
+
+      // 👇 These regexes never match, so indentation is effectively disabled
+      indentationRules: {
+        increaseIndentPattern: /^NOPE$/,
+        decreaseIndentPattern: /^NOPE$/,
+      },
+
+      // 👇 Explicitly say “on Enter, do nothing special”
+      onEnterRules: []
+    });
+
+    monaco.languages.registerOnTypeFormattingEditProvider("bitcoin-script", {
+      autoFormatTriggerCharacters: ["\n"],
+
+      provideOnTypeFormattingEdits(model, position, ch, options) {
+        if (ch !== "\n") return [];
+
+        const newLine = position.lineNumber;
+        const prevLine = newLine - 1;
+        if (prevLine < 1) return [];
+
+        const indentUnit = options.insertSpaces
+          ? " ".repeat(options.tabSize || 4)
+          : "\t";
+
+        const lineToken = (ln) => {
+          const t = model.getLineContent(ln).trim();
+          if (/^OP_IF$/i.test(t)) return "OP_IF";
+          if (/^OP_NOTIF$/i.test(t)) return "OP_NOTIF";
+          if (/^OP_ELSE$/i.test(t)) return "OP_ELSE";
+          if (/^OP_ENDIF$/i.test(t)) return "OP_ENDIF";
+          return null;
+        };
+
+        const findLastOpenDepth = (line) => {
+          let depth = 0;
+          for (let ln = 1; ln <= line; ln++) {
+            const tok = lineToken(ln);
+            if (tok === "OP_IF" || tok === "OP_NOTIF") depth++;
+            else if (tok === "OP_ENDIF") depth = Math.max(0, depth - 1);
+          }
+          return depth;
+        };
+
+        const replaceLeadingWs = (ln, indent) => {
+          const content = model.getLineContent(ln);
+          const firstNonWs = model.getLineFirstNonWhitespaceColumn(ln) || content.length + 1;
+          return {
+            range: new monaco.Range(ln, 1, ln, firstNonWs),
+            text: indent,
+            forceMoveMarkers: true,
+          };
+        };
+
+        const edits = [];
+        const prevTok = lineToken(prevLine);
+        const depthPrev = findLastOpenDepth(prevLine);
+
+        // Re-indent previous line
+        if (prevTok === "OP_IF" || prevTok === "OP_NOTIF") {
+          edits.push(replaceLeadingWs(prevLine, indentUnit.repeat(depthPrev - 1)));
+          edits.push(replaceLeadingWs(newLine, indentUnit.repeat(depthPrev)));
+        } else if (prevTok === "OP_ELSE") {
+          if( depthPrev > 0 )
+            edits.push(replaceLeadingWs(prevLine, indentUnit.repeat(depthPrev - 1)));
+          else{
+            setError("Unmatched OP_ELSE");
+          }
+          edits.push(replaceLeadingWs(newLine, indentUnit.repeat(depthPrev)));
+        } else if (prevTok === "OP_ENDIF") {
+          edits.push(replaceLeadingWs(prevLine, indentUnit.repeat(depthPrev)));
+          edits.push(replaceLeadingWs(newLine, indentUnit.repeat(depthPrev)));
+        } else {
+          edits.push(replaceLeadingWs(newLine, indentUnit.repeat(depthPrev)));
+        }
+
+        return edits;
+      },
     });
   }, [monaco]);
 
