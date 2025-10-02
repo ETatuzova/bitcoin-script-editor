@@ -260,7 +260,7 @@ function bytesToAsm(bytes) {
     else throw new Error("Unknown opcode")
   }
 
-  return out.join("\n");
+  return normalizeAsm(out.join(" ") );
 }
 
 function hexToAsm(hex) {
@@ -372,7 +372,16 @@ const ServerRequestButton = ({ caption, handleClick }) => {
 
 // -------------------- Self-tests --------------------
 function normalizeAsm(s) {
-  return s.trim().replace(/\s+/g, "\n");
+  let indent = "\t"
+  let depth = 0;
+  let words = s.split(/\s+/g);
+  let result = "";
+  for (let w of words) {
+    if( w === "OP_ENDIF" || w === "OP_ELSE" ) depth--;
+    result += indent.repeat(depth) + w + "\n";
+    if( w === "OP_IF" || w === "OP_NOTIF" || w == "OP_ELSE" ) depth++;
+  }
+  return result;
 }
 
 // function runSelfTests() {
@@ -979,7 +988,7 @@ export default function App() {
         </div>
 
         <div>PC={pc}</div>
-        <div>WORD_MAP={JSON.stringify(pcWordMap)}</div>
+        <div>WORD_MAP={JSON.stringify(pcWordMap, null, 2)}</div>
         <div width="100%"><pre>{JSON.stringify(trace, null, 2)}</pre></div>
 
         <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
