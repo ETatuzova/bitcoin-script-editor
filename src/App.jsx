@@ -588,6 +588,7 @@ export default function App() {
     });
   }, [monaco]);
 
+  // Line array contains first word index for each line.
   const computeLineArray = () => {
     if( error ) return;
     let lines = asm.trim().split("\n");
@@ -648,7 +649,10 @@ export default function App() {
     return wordMap;
   }
 
-  async function handleServerRequest(is_last) {
+  // breakpoints == false -- first step
+  // breakpoints == [byte positions] -- first step after 0
+  // breakpoints == true -- last step
+  async function handleServerRequest(breakpoints) {
     normalizeData();
     if(error) return;
     setPreviousTerms(debAsm.trim().split(/\s+/));
@@ -671,9 +675,13 @@ export default function App() {
     setExecutionError(data.status == "error" ? data.error : "");
     let wordMap = computePcWordMap();
     setPcWordMap(wordMap);
-    if( is_last && data.trace && data.trace.length > 0 ) {
+    if( breakpoints && !Array.isArray(breakpoints) && data.trace && data.trace.length > 0 ) {
       console.log("Set debug step to last ", data.trace.length);
       updateDebugStep(data.trace.length, wordMap, data.trace, data.status);
+    } else if ( breakpoints && Array.isArray(breakpoints) && breakpoints.length > 0 ) {
+      let newDebugStep = newDebugStepAfterBreakpoint(0, data.trace, breakpoints)
+      console.log("Set debug step to first breakpoint after 0 newDebugStep = ", newDebugStep);
+      updateDebugStep(newDebugStep, wordMap, data.trace, data.status);
     } else {
       updateDebugStep(1, wordMap, data.trace, data.status);
     }
@@ -681,11 +689,6 @@ export default function App() {
     else if( data.status == "error") setInfo("⚠️ " + data.error);
     else setInfo("");
   }
-
-  // Run tests once at load
-  // useEffect(() => {
-  //   setTests(runSelfTests());
-  // }, []);
 
   useEffect(()=>{
     if((!searchParams.has("hex") && hex != "") || searchParams.get("hex") != hex ){
@@ -819,11 +822,44 @@ export default function App() {
     }
   }
 
+  const debugRestart = () => {
+    handleServerRequest();
+  }
+
   const debugBackward = () => {
     if( !trace || trace.length == 0 ) {
       handleServerRequest();
     } else {
       updateDebugStep( currentDebugStep > 1 ? currentDebugStep - 1 : 1, pcWordMap, trace, status );
+    }
+  }
+
+  const debugEnd = () => {
+    if( !trace || trace.length == 0 ) {
+      handleServerRequest(true);
+    } else {
+      updateDebugStep( trace.length, pcWordMap, trace, status );
+    }
+  }
+
+  const newDebugStepAfterBreakpoint = (currentDebugStep, trace, indices) => {
+    let newDebugStep = currentDebugStep >= trace.length ? trace.length : currentDebugStep + 1;
+    while( newDebugStep < trace.length ) {
+      if( indices.includes( parseInt(trace[newDebugStep - 1].pc, 10) ) ){
+        break;
+      }
+      newDebugStep++;
+    }
+    return newDebugStep;
+  }
+
+  const debugBreakpoint = () => {
+    let indices = computeBreakpointBytePositions(computeLineArray());
+    if( !trace || trace.length == 0 ) {
+      handleServerRequest(indices);
+    } else {
+      let newDebugStep = newDebugStepAfterBreakpoint(currentDebugStep, trace, indices);
+      updateDebugStep(newDebugStep, pcWordMap, trace, status);
     }
   }
 
@@ -865,10 +901,11 @@ export default function App() {
               </TabButton>
             </div>
             <div className="float-right" style={{ marginRight: "16px" }}>
-              <button className="debug-button" title="Start again" onClick={()=>{debugBackward();}}>&larr;</button>
-              <button className="debug-button" title="Execute one step" onClick={()=>{debugForward();}}>&rarr;</button>
-              <button className="debug-button" title="Execute until breakpoint" onClick={()=>{console.log(computeBreakpointBytePositions(computeLineArray()));}}>&darr;</button>
-              <button className="debug-button" title="Execute until the end of execution">&darr;&darr;</button>
+              <button className="debug-button" title="Restart" onClick={()=>{debugRestart();}}>&#8630;</button>
+              <button className="debug-button" title="Step back" onClick={()=>{debugBackward();}}>&larr;</button>
+              <button className="debug-button" title="Step forward" onClick={()=>{debugForward();}}>&rarr;</button>
+              <button className="debug-button" title="Execute until breakpoint" onClick={()=>{debugBreakpoint();}}>&darr;</button>
+              <button className="debug-button" title="Execute till the end" onClick={()=>{debugEnd();}}>&darr;&darr;</button>
             </div>
 
             <AnimatePresence mode="wait">
