@@ -354,7 +354,7 @@ const Card = ({ children, className = "" }) => (
 );
 
 const Header = () => (
-  <div className="flex items-center justify-between gap-3 mb-4">
+  <div className="items-center justify-between gap-3 mb-4">
     <div>
       <h1 className="text-2xl font-semibold">Bitcoin Script Editor</h1>
       <p className="text-sm text-gray-500">Live Hex ⇄ ASM with validation (no external libs)</p>
@@ -868,9 +868,9 @@ export default function App() {
       <div className="max-w-3xl mx-auto">
         <Header />
 
-        <div style={{ width: "100%" }}>
+        <div className="w-full">
           <Card className="tabs-frame">
-            <div className="p-3 flex items-center gap-2 float-left">
+            <div className="p-3 items-center gap-2 float-left">
               <TabButton id="tab-ASM" active={activeTab === "ASM"} onClick={() => {
                 if( !error ) {
                   setActiveTab("ASM");
@@ -990,7 +990,7 @@ export default function App() {
             </AnimatePresence>
           </Card>
           <Card className="stack-frame">
-            <div className="p-3 flex items-center gap-2">
+            <div className="p-3 items-center gap-2">
               <TabButton>Stack</TabButton>
               <SimpleEditor
                 placeholder="Stack"
@@ -1000,7 +1000,7 @@ export default function App() {
             </div>
           </Card>
           <Card className="stack-frame">
-            <div className="p-3 flex items-center gap-2">
+            <div className="p-3 items-center gap-2">
               <TabButton>AltStack</TabButton>
               <SimpleEditor
                 placeholder="AltStack"
@@ -1024,61 +1024,18 @@ export default function App() {
             </div>
         </div>
 
-        <div>PC={pc}</div>
-        <div>WORD_MAP={JSON.stringify(pcWordMap, null, 2)}</div>
-        <div width="100%"><pre>{JSON.stringify(trace, null, 2)}</pre></div>
-
-        <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Card className="p-4">
-            <h3 className="font-medium mb-2">Tips</h3>
-            <ul className="list-disc pl-5 text-sm text-gray-700 space-y-1">
-              <li>Use <code className="px-1 rounded bg-gray-100">OP_…</code> names for opcodes.</li>
-              <li>Wrap data pushes in angle brackets: <code className="px-1 rounded bg-gray-100">&lt;hex&gt;</code>.</li>
-              <li>Small integers (−1, 0–16) are accepted as numeric tokens.</li>
-              <li>HEX must be even-length and valid hex characters.</li>
-            </ul>
-          </Card>
-
-          <Card className="p-4">
-            <h3 className="font-medium mb-2">Round-trip Notes</h3>
-            <p className="text-sm text-gray-700">
-              This editor handles all push opcodes (1–75, PUSHDATA1/2/4) and a broad set of standard opcodes.
-              Unknown opcodes are shown as <code className="px-1 rounded bg-gray-100">0xNN</code> during HEX → ASM.
-              Formatting is stable so that <em>ASM → HEX → ASM</em> and <em>HEX → ASM → HEX</em> round-trip.
-            </p>
-          </Card>
+        <div style={{ display: "none" }}>PC={pc}</div>
+        <div style={{ display: "none" }}>WORD_MAP={JSON.stringify(pcWordMap, null, 2)}</div>
+        <div style={{ display: "none" }} width="100%"><pre>{JSON.stringify(trace, null, 2)}</pre></div>
+        <div>
+          <a href="?hex=0181018193020180020180930301008003010080930401000080040100008093876987690280010280019302000387">
+            Negative numbers arithmetics demo
+          </a>
+          <br/>
+          <a href="?hex=006351675a685151946351675a6801806351675a68028000635a6751680200006351675a680200806351675a689393939393013c87">
+            What is false demo
+          </a>
         </div>
-
-        {/* <Card className="p-4 mt-6">
-          <h3 className="font-medium mb-2">Self‑tests</h3>
-          <div className="text-sm text-gray-700">
-            <p className="mb-2">Quick checks to ensure conversions work as expected.</p>
-            <div className="space-y-2">
-              {tests.map((t, idx) => (
-                <div key={idx} className={`p-2 rounded border ${t.pass ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'}`}>
-                  <div className="flex items-center gap-2">
-                    <span className={`text-xs px-2 py-0.5 rounded ${t.pass ? 'bg-green-600 text-white' : 'bg-red-600 text-white'}`}>{t.pass ? 'PASS' : 'FAIL'}</span>
-                    <span className="font-medium">{t.name}</span>
-                  </div>
-                  {!t.pass && (
-                    <div className="mt-1 text-xs text-gray-800">
-                      {t.err ? (
-                        <div>Error: {t.err}</div>
-                      ) : (
-                        <div>
-                          <div><strong>asm</strong>: {t.asm}</div>
-                          <div><strong>hex</strong>: {t.hex}</div>
-                          <div><strong>rAsm</strong>: {t.rAsm}</div>
-                          <div><strong>rHex</strong>: {t.rHex}</div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        </Card> */}
       </div>
     </div>
   );
