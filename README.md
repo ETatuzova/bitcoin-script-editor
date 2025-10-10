@@ -21,5 +21,5 @@ Run from the project root folder
 ```
 npm run dev
 ```
-# Try script editor
+# Try script editor locally
 Address: `http://localhost:5173/`
