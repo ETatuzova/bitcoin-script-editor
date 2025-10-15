@@ -16,8 +16,10 @@ function run_debugger(input){
 app.get("/run-job", (req, res) => {
   const input = req.body.input;
 
-  // Run C++ program
-  exec(process.cwd() + `/indexer/build/bin/bitcoin-debugger --code=${input}`, (error, stdout, stderr) => {
+  // Run C++ program in docker container
+  // For linux it can be executed natively
+  let command = `docker run -v ` + process.cwd() + `/indexer/build/bin:/work ci_native /work/bitcoin-debugger --code=${input}`;
+  exec(command, (error, stdout, stderr) => {
     if (error) {
       console.error(`Error: ${error.message}`);
       res.status(500).json({ error: error.message, status:"error" });
@@ -32,8 +34,9 @@ app.get("/run-job", (req, res) => {
 app.post("/run-job", (req, res) => {
   const input = req.body.input;
 
-  // Run C++ program
-  exec(process.cwd() + `/indexer/build/bin/bitcoin-debugger --code=${input}`, (error, stdout, stderr) => {
+  // For linux it can be executed natively
+  let command = `docker run -v ` + process.cwd() + `/indexer/build/bin:/work ci_native /work/bitcoin-debugger --code=${input}`;
+  exec(command, (error, stdout, stderr) => {
     if (error) {
       console.error(`Error: ${error.message}`);
       return res.status(500).json({ error: error.message, status: "error", output: stdout.trim() });
