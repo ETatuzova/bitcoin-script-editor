@@ -192,7 +192,7 @@ export const SimpleEditor = ({
   function highlightCurrent(currentIndex) {
     words = parseCommands();
     if( !words.length ) return;
-    console.log("Highlighting current command:", currentIndex, status);
+    // console.log("Highlighting current command:", currentIndex, status);
 
     // Clear old highlight
     debugDecorationsRef.current = editorRef.current.deltaDecorations(debugDecorationsRef.current, []);
@@ -213,7 +213,7 @@ export const SimpleEditor = ({
       // Scroll into view
       editorRef.current.revealRangeInCenter(current.range);
     } else {
-      console.log("Highlighting last line");
+      // console.log("Highlighting last line");
       currentIndex = currentIndex > words.length - 1? words.length - 1 : currentIndex;
       let lineNumber = words[currentIndex].range.endLineNumber;
       let model = editorRef.current.getModel();

@@ -9,16 +9,12 @@ const app = express();
 app.use(express.json());
 app.use(cors({ origin: "http://localhost:5173" }));
 
-function run_debugger(input){
-
-}
-
 app.get("/run-job", (req, res) => {
   const input = req.body.input;
 
   // Run C++ program in docker container
   // For linux it can be executed natively
-  let command = `docker run -v ` + process.cwd() + `/indexer/build/bin:/work ci_native /work/bitcoin-debugger --code=${input}`;
+  let command = `docker run -v ` + process.cwd() + `/indexer/build/bin:/work ci_native /work/bitcoin-eval -script-hex=${input} debug`;
   exec(command, (error, stdout, stderr) => {
     if (error) {
       console.error(`Error: ${error.message}`);
@@ -35,7 +31,7 @@ app.post("/run-job", (req, res) => {
   const input = req.body.input;
 
   // For linux it can be executed natively
-  let command = `docker run -v ` + process.cwd() + `/indexer/build/bin:/work ci_native /work/bitcoin-debugger --code=${input}`;
+  let command = `docker run -v ` + process.cwd() + `/indexer/build/bin:/work ci_native /work/bitcoin-eval -script-hex=${input} debug`;
   exec(command, (error, stdout, stderr) => {
     if (error) {
       console.error(`Error: ${error.message}`);
