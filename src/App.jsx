@@ -8,11 +8,6 @@ import {SimpleEditor} from "./SimpleEditor"
 
 /**
  * Bitcoin Script Hex ⇄ ASM Editor
- *
- * NOTE: Removed dependency on `bitcoinjs-lib` to avoid the runtime error
- * "Cannot destructure property 'sha256' ..." that can occur with some
- * browser/bundler environments. This implementation performs ASM ⇄ HEX
- * conversion in pure JS and supports standard opcodes and all PUSH* encodings.
  */
 
 // -------------------- Opcode Tables --------------------
@@ -645,7 +640,7 @@ export default function App() {
       cur++;
     }
     wordMap[cur] = terms.length - 1;
-    console.log(JSON.stringify(wordMap));
+    // console.log(JSON.stringify(wordMap));
     return wordMap;
   }
 
@@ -658,29 +653,41 @@ export default function App() {
     setPreviousTerms(debAsm.trim().split(/\s+/));
     // Handle the server request here
 
-    const response = await fetch("http://localhost:3000/run-job", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ input: hex })
-    }).catch((error) => {
+    // console.log("Sending request to server");
+    let response = false;
+    try {
+      response = await fetch("http://localhost:3000/run-job", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ input: hex })
+      });
+
+      if( !response ) { setInfo("⚠️ Server connection error"); return; }
+      if( !response.ok ) { setInfo("⚠️ Server response status " + response.status + ": " + response.statusText); return; }
+    } catch(error) {
       // Your error is here!
       setInfo("⚠️ Server connection error: " + error);
-    });
-
-    if( !response || !response.ok ) return;
+      return;
+    }
 
     const data = await response.json();
+    if( !data.hasOwnProperty("trace") || !data.hasOwnProperty("status") ) {
+      setInfo("⚠️ Server response format error");
+      // console.log("Response JSON data: ", data);
+      return;
+    }
+
     setTrace(data.trace);
     setStatus(data.status);
     setExecutionError(data.status == "error" ? data.error : "");
     let wordMap = computePcWordMap();
     setPcWordMap(wordMap);
     if( breakpoints && !Array.isArray(breakpoints) && data.trace && data.trace.length > 0 ) {
-      console.log("Set debug step to last ", data.trace.length);
+      // console.log("Set debug step to last ", data.trace.length);
       updateDebugStep(data.trace.length, wordMap, data.trace, data.status);
     } else if ( breakpoints && Array.isArray(breakpoints) && breakpoints.length > 0 ) {
       let newDebugStep = newDebugStepAfterBreakpoint(0, data.trace, breakpoints)
-      console.log("Set debug step to first breakpoint after 0 newDebugStep = ", newDebugStep);
+      // console.log("Set debug step to first breakpoint after 0 newDebugStep = ", newDebugStep);
       updateDebugStep(newDebugStep, wordMap, data.trace, data.status);
     } else {
       updateDebugStep(1, wordMap, data.trace, data.status);
@@ -795,7 +802,7 @@ export default function App() {
     let newDebugWord = pcWordMap[newPc.toString()];
     if( newDebugStep >= trace.length) {
       setCurrentStepStatus(status);
-      console.log("Set to final status ", status, " newDebugStep = ", newDebugStep, " trace.length = ", trace.length);
+      // console.log("Set to final status ", status, " newDebugStep = ", newDebugStep, " trace.length = ", trace.length);
       if( status === "success" )
         setInfo( "✅ Success!" );
       else
@@ -1024,9 +1031,9 @@ export default function App() {
             </div>
         </div>
 
-        <div style={{ display: "none" }}>PC={pc}</div>
-        <div style={{ display: "none" }}>WORD_MAP={JSON.stringify(pcWordMap, null, 2)}</div>
-        <div style={{ display: "none" }} width="100%"><pre>{JSON.stringify(trace, null, 2)}</pre></div>
+        <div>PC={pc}</div>
+        <div>WORD_MAP={JSON.stringify(pcWordMap, null, 2)}</div>
+        <div width="100%"><pre>{JSON.stringify(trace, null, 2)}</pre></div>
         <div>
           <a href="?hex=0181018193020180020180930301008003010080930401000080040100008093876987690280010280019302000387">
             Negative numbers arithmetics demo
