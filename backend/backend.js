@@ -14,7 +14,7 @@ app.get("/run-job", (req, res) => {
 
   // Run C++ program in docker container
   // For linux it can be executed natively
-  let command = `docker run -v ` + process.cwd() + `/indexer/build/bin:/work ci_native /work/bitcoin-eval -script-hex=${input} debug`;
+  let command = `docker run -v ` + process.cwd() + `/indexer/build/bin:/work ci_native /work/bitcoin-eval -script-hex=${input} -trace=debug eval`;
   exec(command, (error, stdout, stderr) => {
     if (error) {
       console.error(`Error: ${error.message}`);
@@ -31,7 +31,7 @@ app.post("/run-job", (req, res) => {
   const input = req.body.input;
 
   // For linux it can be executed natively
-  let command = `docker run -v ` + process.cwd() + `/indexer/build/bin:/work ci_native /work/bitcoin-eval -script-hex=${input} debug`;
+  let command = `docker run -v ` + process.cwd() + `/indexer/build/bin:/work ci_native /work/bitcoin-eval -script-hex=${input} -trace=debug eval`;
   exec(command, (error, stdout, stderr) => {
     if (error) {
       console.error(`Error: ${error.message}`);
