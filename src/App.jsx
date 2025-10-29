@@ -1031,9 +1031,9 @@ export default function App() {
             </div>
         </div>
 
-        <div>PC={pc}</div>
-        <div>WORD_MAP={JSON.stringify(pcWordMap, null, 2)}</div>
-        <div width="100%"><pre>{JSON.stringify(trace, null, 2)}</pre></div>
+        <div style={{display:"none"}}>PC={pc}</div>
+        <div style={{display:"none"}}>WORD_MAP={JSON.stringify(pcWordMap, null, 2)}</div>
+        <div style={{display:"none"}} width="100%"><pre>{JSON.stringify(trace, null, 2)}</pre></div>
         <div>
           <a href="?hex=0181018193020180020180930301008003010080930401000080040100008093876987690280010280019302000387">
             Negative numbers arithmetics demo
